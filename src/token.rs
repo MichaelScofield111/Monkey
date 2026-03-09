@@ -62,7 +62,7 @@ mod tests {
             (TokenType::EOF, ""),
         ];
 
-        let mut l = Lexer::new(input.to_string());
+        let mut l = Lexer::new(input);
 
         for (i, (expected_type, expected_literal)) in tests.iter().enumerate() {
             let tok = l.next_token();
@@ -134,7 +134,7 @@ mod tests {
             (TokenType::EOF, ""),
         ];
 
-        let mut l = Lexer::new(input.to_string());
+        let mut l = Lexer::new(input);
 
         for (i, (expected_type, expected_literal)) in tests.iter().enumerate() {
             let tok = l.next_token();

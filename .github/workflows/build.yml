@@ -3,12 +3,12 @@ name: build
 on:
   push:
     branches:
-      - main
+      - master
     tags:
       - v*
   pull_request:
     branches:
-      - main
+      - master
 
 permissions:
   contents: write
@@ -39,4 +39,3 @@ jobs:
         run: cargo clippy --all-targets --all-features --tests --benches -- -D warnings
       - name: Execute rust tests
         run: cargo nextest run --all-features
-  

@@ -67,8 +67,34 @@ impl<'a> Lexer<'a> {
         self.skip_whitespaces();
 
         let tok = match self.ch {
-            b'=' => Token {
-                r#type: TokenType::ASSIGN,
+            b'=' => {
+                if self.peek_char() == b'=' {
+                    // 10 == 10
+                    let ch = (self.ch as char).to_string();
+                    self.read_char();
+                    let n_ch = (self.ch as char).to_string();
+                    let liter = ch + &n_ch;
+                    Token {
+                        r#type: TokenType::EQ,
+                        literal: liter,
+                    }
+                } else {
+                    Token {
+                        r#type: TokenType::ASSIGN,
+                        literal: (self.ch as char).to_string(),
+                    }
+                }
+            }
+            b'-' => Token {
+                r#type: TokenType::MINUS,
+                literal: (self.ch as char).to_string(),
+            },
+            b'*' => Token {
+                r#type: TokenType::ASTERISK,
+                literal: (self.ch as char).to_string(),
+            },
+            b'/' => Token {
+                r#type: TokenType::SLASH,
                 literal: (self.ch as char).to_string(),
             },
             b';' => Token {
@@ -95,8 +121,34 @@ impl<'a> Lexer<'a> {
                 r#type: TokenType::COMMA,
                 literal: (self.ch as char).to_string(),
             },
+            b'!' => {
+                if self.peek_char() == b'=' {
+                    // 10 != 5
+                    let ch = (self.ch as char).to_string();
+                    self.read_char();
+                    let n_ch = (self.ch as char).to_string();
+                    let liter = ch + &n_ch;
+                    Token {
+                        r#type: TokenType::NOTEQ,
+                        literal: liter,
+                    }
+                } else {
+                    Token {
+                        r#type: TokenType::BANG,
+                        literal: (self.ch as char).to_string(),
+                    }
+                }
+            }
             b'+' => Token {
                 r#type: TokenType::PLUS,
+                literal: (self.ch as char).to_string(),
+            },
+            b'<' => Token {
+                r#type: TokenType::LT,
+                literal: (self.ch as char).to_string(),
+            },
+            b'>' => Token {
+                r#type: TokenType::GT,
                 literal: (self.ch as char).to_string(),
             },
             0 => Token {
@@ -130,6 +182,14 @@ impl<'a> Lexer<'a> {
     fn skip_whitespaces(&mut self) {
         while matches!(self.ch, b' ' | b'\t' | b'\n' | b'\r') {
             self.read_char();
+        }
+    }
+
+    fn peek_char(&self) -> u8 {
+        if self.read_position >= self.input.len() {
+            0
+        } else {
+            self.input[self.read_position]
         }
     }
 }

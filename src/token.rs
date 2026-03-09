@@ -1,6 +1,7 @@
 #[derive(Debug)]
 pub struct Token {
     pub r#type: TokenType,
+    #[allow(unused)]
     pub literal: String,
 }
 
@@ -14,6 +15,10 @@ pub enum TokenType {
 
     ASSIGN,
     PLUS,
+    MINUS,
+    BANG,
+    ASTERISK,
+    SLASH,
 
     COMMA,
     SEMICOLON,
@@ -25,9 +30,21 @@ pub enum TokenType {
 
     LET,
     FUNCTION,
+    IF,
+    ELSE,
+    RETURN,
+    TRUE,
+    FALSE,
+
+    LT,
+    GT,
+
+    EQ,
+    NOTEQ,
 }
 
 impl Token {
+    #[allow(dead_code)]
     pub fn new(r#type: TokenType, literal: String) -> Self {
         Token { r#type, literal }
     }
@@ -36,7 +53,12 @@ impl Token {
         match ident.as_str() {
             "let" => TokenType::LET,
             "fn" => TokenType::FUNCTION,
-            _ => TokenType::IDENT, // 改这里
+            "if" => TokenType::IF,
+            "else" => TokenType::ELSE,
+            "return" => TokenType::RETURN,
+            "true" => TokenType::TRUE,
+            "false" => TokenType::FALSE,
+            _ => TokenType::IDENT,
         }
     }
 }
@@ -88,10 +110,22 @@ mod tests {
                let ten = 10;
 
                let add = fn(x, y) {
-                    x + y;
+	x + y;
                };
 
                let result = add(five, ten);
+
+               !-/*5;
+               5 < 10 > 5
+
+               if (5 < 10) {
+	return true;
+               } else {
+	return false;
+               }
+
+               10 == 10;
+               10 != 9;
                "#;
 
         let tests = vec![
@@ -130,6 +164,42 @@ mod tests {
             (TokenType::COMMA, ","),
             (TokenType::IDENT, "ten"),
             (TokenType::RPAREN, ")"),
+            (TokenType::SEMICOLON, ";"),
+            (TokenType::BANG, "!"),
+            (TokenType::MINUS, "-"),
+            (TokenType::SLASH, "/"),
+            (TokenType::ASTERISK, "*"),
+            (TokenType::INT, "5"),
+            (TokenType::SEMICOLON, ";"),
+            (TokenType::INT, "5"),
+            (TokenType::LT, "<"),
+            (TokenType::INT, "10"),
+            (TokenType::GT, ">"),
+            (TokenType::INT, "5"),
+            (TokenType::IF, "if"),
+            (TokenType::LPAREN, "("),
+            (TokenType::INT, "5"),
+            (TokenType::LT, "<"),
+            (TokenType::INT, "10"),
+            (TokenType::RPAREN, ")"),
+            (TokenType::LBRACE, "{"),
+            (TokenType::RETURN, "return"),
+            (TokenType::TRUE, "true"),
+            (TokenType::SEMICOLON, ";"),
+            (TokenType::RBRACE, "}"),
+            (TokenType::ELSE, "else"),
+            (TokenType::LBRACE, "{"),
+            (TokenType::RETURN, "return"),
+            (TokenType::FALSE, "false"),
+            (TokenType::SEMICOLON, ";"),
+            (TokenType::RBRACE, "}"),
+            (TokenType::INT, "10"),
+            (TokenType::EQ, "=="),
+            (TokenType::INT, "10"),
+            (TokenType::SEMICOLON, ";"),
+            (TokenType::INT, "10"),
+            (TokenType::NOTEQ, "!="),
+            (TokenType::INT, "9"),
             (TokenType::SEMICOLON, ";"),
             (TokenType::EOF, ""),
         ];

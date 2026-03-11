@@ -1,13 +1,14 @@
-#[derive(Debug)]
+#[derive(Debug, Clone, Default)]
 pub struct Token {
     pub r#type: TokenType,
     #[allow(unused)]
     pub literal: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum TokenType {
     ILLEGAL,
+    #[default]
     EOF,
 
     IDENT,

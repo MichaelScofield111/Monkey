@@ -1,7 +1,5 @@
+use monkey::start;
 use std::io::{self, BufReader};
-mod lexer;
-mod repl;
-mod token;
 
 fn main() -> io::Result<()> {
     println!("Hello MichaelScofield! This is the Monkey programming language!");
@@ -13,6 +11,6 @@ fn main() -> io::Result<()> {
     let reader = BufReader::new(stdin);
     let writer = stdout;
 
-    repl::start(reader, writer)?;
+    start(reader, writer)?;
     Ok(())
 }

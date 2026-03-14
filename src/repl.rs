@@ -20,7 +20,7 @@ pub fn start<R: BufRead, W: Write>(mut input: R, mut output: W) -> io::Result<()
         let mut l = Lexer::new(&line);
         loop {
             let token = l.next_token();
-            if token.r#type == TokenType::EOF {
+            if token.r#type == TokenType::Eof {
                 break;
             }
 

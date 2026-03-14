@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Expression, Identifier, LetStatement, Program, Statement},
+    ast::{Identifier, LetStatement, Program, ReturnStatement, Statement},
     lexer::Lexer,
     token::{Token, TokenType},
 };
@@ -29,12 +29,12 @@ impl<'a> Parser<'a> {
         self.peek_token = self.lexer.next_token();
     }
 
-    fn parse_programe(&mut self) -> Program {
+    fn parse_program(&mut self) -> Program {
         let mut program = Program {
             statements: Vec::new(),
         };
 
-        while self.cur_token.r#type != TokenType::EOF {
+        while self.cur_token.r#type != TokenType::Eof {
             let stmt = self.parse_statement();
 
             if let Some(stmt) = stmt {
@@ -49,7 +49,8 @@ impl<'a> Parser<'a> {
 
     fn parse_statement(&mut self) -> Option<Statement> {
         match self.cur_token.r#type {
-            TokenType::LET => self.parse_let_statement(),
+            TokenType::Let => self.parse_let_statement(),
+            TokenType::Return => self.parse_return_statement(),
             _ => {
                 println!("unsupported type: {:?}", self.cur_token.r#type);
                 None
@@ -58,9 +59,10 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_let_statement(&mut self) -> Option<Statement> {
+        // Let Token
         let token = self.cur_token.clone();
 
-        if !self.expect_peek(TokenType::IDENT) {
+        if !self.expect_peek(TokenType::Ident) {
             return None;
         }
 
@@ -70,23 +72,36 @@ impl<'a> Parser<'a> {
             value: self.cur_token.literal.clone(),
         };
 
-        if !self.expect_peek(TokenType::ASSIGN) {
+        if !self.expect_peek(TokenType::Assign) {
             return None;
         }
 
         // skip expression until semicolon
-        while self.cur_token.r#type != TokenType::SEMICOLON {
+        while self.cur_token.r#type != TokenType::Semicolon {
             self.next_token();
         }
 
         Some(Statement::Let(LetStatement {
             token,
             name,
-            value: Expression::Identifier(Identifier {
-                token: Token::default(),
-                value: "".to_string(),
-            }),
+            value: None, // None 而不是假数据
         }))
+    }
+
+    fn parse_return_statement(&mut self) -> Option<Statement> {
+        // Return Token
+        let token = self.cur_token.clone();
+
+        self.next_token(); // 跳过 return，移到表达式第一个 token
+
+        // TODO: 暂时跳过表达式，直到遇到分号
+        while self.cur_token.r#type != TokenType::Semicolon
+            && self.cur_token.r#type != TokenType::Eof
+        {
+            self.next_token();
+        }
+
+        Some(Statement::Return(ReturnStatement { token, value: None }))
     }
 
     fn expect_peek(&mut self, t: TokenType) -> bool {
@@ -118,48 +133,75 @@ mod tests {
         if p.errors.is_empty() {
             return;
         }
-
         println!("parser has {} errors", p.errors.len());
-
-        for msg in &p.errors {
+        for msg in p.errors.iter() {
             println!("parser error: {}", msg);
         }
-
         panic!("parser errors encountered");
     }
 
     #[test]
     fn test_let_statement() {
         let input = r#"
-            let x = 5;
-            let y = 10;
-            let foobar = 383838;
+                let x = 5;
+                let y = 10;
+                let foobar = 383838;
             "#;
 
-        let mut l = Lexer::new(input);
+        let l = Lexer::new(input);
         let mut p = Parser::new(l);
-
-        let program = p.parse_programe();
+        let program = p.parse_program();
         check_parser_errors(&p);
 
-        let tests = vec!["x", "y", "foobar"];
+        assert_eq!(
+            program.statements.len(),
+            3,
+            "expected 3 statements, got {}",
+            program.statements.len()
+        );
 
-        for (i, expected) in tests.iter().enumerate() {
-            let stmt = &program.statements[i];
-
-            test_let_statement(stmt, expected);
+        let expected_names = ["x", "y", "foobar"];
+        for (i, name) in expected_names.iter().enumerate() {
+            check_let_statement(&program.statements[i], name);
         }
+    }
 
-        fn test_let_statement(stmt: &Statement, name: &str) {
-            // check token literal
-            assert_eq!(stmt.token_literal(), "let");
+    fn check_let_statement(stmt: &Statement, expected_name: &str) {
+        assert_eq!(stmt.token_literal(), "let");
+        match stmt {
+            Statement::Let(let_stmt) => {
+                assert_eq!(let_stmt.name.value, expected_name);
+                assert_eq!(let_stmt.name.token_literal(), expected_name);
+            }
+            _ => panic!("expected LetStatement"),
+        }
+    }
 
-            // Rust enum match (替代 Go type assertion)
+    #[test]
+    fn test_return_statement() {
+        let input = r#"
+                return 5;
+                return 10;
+                return 993322;
+            "#;
+
+        let l = Lexer::new(input);
+        let mut p = Parser::new(l);
+        let program = p.parse_program();
+        check_parser_errors(&p);
+
+        assert_eq!(
+            program.statements.len(),
+            3,
+            "expected 3 statements, got {}",
+            program.statements.len()
+        );
+
+        for stmt in &program.statements {
+            assert_eq!(stmt.token_literal(), "return");
             match stmt {
-                Statement::Let(let_stmt) => {
-                    assert_eq!(let_stmt.name.value, name);
-                    assert_eq!(let_stmt.name.token_literal(), name);
-                }
+                Statement::Return(_) => {}
+                _ => panic!("expected ReturnStatement"),
             }
         }
     }

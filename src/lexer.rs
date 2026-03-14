@@ -75,50 +75,50 @@ impl<'a> Lexer<'a> {
                     let n_ch = (self.ch as char).to_string();
                     let liter = ch + &n_ch;
                     Token {
-                        r#type: TokenType::EQ,
+                        r#type: TokenType::Eq,
                         literal: liter,
                     }
                 } else {
                     Token {
-                        r#type: TokenType::ASSIGN,
+                        r#type: TokenType::Assign,
                         literal: (self.ch as char).to_string(),
                     }
                 }
             }
             b'-' => Token {
-                r#type: TokenType::MINUS,
+                r#type: TokenType::Minus,
                 literal: (self.ch as char).to_string(),
             },
             b'*' => Token {
-                r#type: TokenType::ASTERISK,
+                r#type: TokenType::Asterisk,
                 literal: (self.ch as char).to_string(),
             },
             b'/' => Token {
-                r#type: TokenType::SLASH,
+                r#type: TokenType::Slash,
                 literal: (self.ch as char).to_string(),
             },
             b';' => Token {
-                r#type: TokenType::SEMICOLON,
+                r#type: TokenType::Semicolon,
                 literal: (self.ch as char).to_string(),
             },
             b'(' => Token {
-                r#type: TokenType::LPAREN,
+                r#type: TokenType::Lparen,
                 literal: (self.ch as char).to_string(),
             },
             b')' => Token {
-                r#type: TokenType::RPAREN,
+                r#type: TokenType::Rparen,
                 literal: (self.ch as char).to_string(),
             },
             b'{' => Token {
-                r#type: TokenType::LBRACE,
+                r#type: TokenType::Lbrace,
                 literal: (self.ch as char).to_string(),
             },
             b'}' => Token {
-                r#type: TokenType::RBRACE,
+                r#type: TokenType::Rbrace,
                 literal: (self.ch as char).to_string(),
             },
             b',' => Token {
-                r#type: TokenType::COMMA,
+                r#type: TokenType::Comma,
                 literal: (self.ch as char).to_string(),
             },
             b'!' => {
@@ -129,30 +129,30 @@ impl<'a> Lexer<'a> {
                     let n_ch = (self.ch as char).to_string();
                     let liter = ch + &n_ch;
                     Token {
-                        r#type: TokenType::NOTEQ,
+                        r#type: TokenType::Noteq,
                         literal: liter,
                     }
                 } else {
                     Token {
-                        r#type: TokenType::BANG,
+                        r#type: TokenType::Bang,
                         literal: (self.ch as char).to_string(),
                     }
                 }
             }
             b'+' => Token {
-                r#type: TokenType::PLUS,
+                r#type: TokenType::Plus,
                 literal: (self.ch as char).to_string(),
             },
             b'<' => Token {
-                r#type: TokenType::LT,
+                r#type: TokenType::Lt,
                 literal: (self.ch as char).to_string(),
             },
             b'>' => Token {
-                r#type: TokenType::GT,
+                r#type: TokenType::Gt,
                 literal: (self.ch as char).to_string(),
             },
             0 => Token {
-                r#type: TokenType::EOF,
+                r#type: TokenType::Eof,
                 literal: "".to_string(),
             },
             _ => {
@@ -163,12 +163,12 @@ impl<'a> Lexer<'a> {
                 } else if Lexer::is_digit(self.ch) {
                     let literal = self.read_digit();
                     return Token {
-                        r#type: TokenType::INT,
+                        r#type: TokenType::Int,
                         literal,
                     };
                 } else {
                     Token {
-                        r#type: TokenType::ILLEGAL,
+                        r#type: TokenType::Illegal,
                         literal: self.ch.to_string(),
                     }
                 }

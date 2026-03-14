@@ -28,6 +28,7 @@ impl Node for Program {
 pub enum Statement {
     Let(LetStatement),
     Return(ReturnStatement),
+    Expression(ExpressionStatement),
     // ... like Expression statement,
 }
 
@@ -36,12 +37,14 @@ impl Node for Statement {
         match self {
             Statement::Let(s) => s.token_literal(),
             Statement::Return(s) => s.token_literal(),
+            Statement::Expression(s) => s.token_literal(),
         }
     }
     fn string(&self) -> String {
         match self {
             Statement::Let(s) => s.string(),
             Statement::Return(s) => s.string(),
+            Statement::Expression(s) => s.string(),
         }
     }
 }
@@ -50,6 +53,7 @@ impl Node for Statement {
 // let x = 5  x: Indentifier,  5: Expression
 pub enum Expression {
     Identifier(Identifier),
+    IntegerLiteral(IntegerLiteral),
     // any Expression will be add
 }
 
@@ -57,12 +61,14 @@ impl Node for Expression {
     fn token_literal(&self) -> &str {
         match self {
             Expression::Identifier(i) => i.token_literal(),
+            Expression::IntegerLiteral(i) => i.token_literal(),
         }
     }
 
     fn string(&self) -> String {
         match self {
             Expression::Identifier(i) => i.string(),
+            Expression::IntegerLiteral(i) => i.string(),
         }
     }
 }
@@ -84,6 +90,20 @@ impl Node for Identifier {
     }
 }
 
+pub struct IntegerLiteral {
+    pub token: Token, // {INT, 5}
+    pub value: i64,   // 5 -> 5
+}
+impl Node for IntegerLiteral {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+
+    fn string(&self) -> String {
+        self.value.to_string()
+    }
+}
+
 // ── let <name> = <value>;
 pub struct LetStatement {
     pub token: Token, // LET token
@@ -98,8 +118,11 @@ impl Node for LetStatement {
     }
 
     fn string(&self) -> String {
-        let val = self.value.as_ref().map(|v| v.string()).unwrap_or_default();
-        format!("let {} = {};", self.name.value, val)
+        format!(
+            "let {} = {};",
+            self.name.string(),
+            self.value.as_ref().map(|v| v.string()).unwrap_or_default()
+        )
     }
 }
 
@@ -116,8 +139,28 @@ impl Node for ReturnStatement {
     }
 
     fn string(&self) -> String {
-        let val = self.value.as_ref().map(|v| v.string()).unwrap_or_default();
-        format!("return {};", val)
+        format!(
+            "return {};",
+            self.value.as_ref().map(|v| v.string()).unwrap_or_default()
+        )
+    }
+}
+
+// ExpressionStatement
+pub struct ExpressionStatement {
+    pub token: Token,
+    pub expression: Option<Expression>,
+}
+
+impl Node for ExpressionStatement {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+    fn string(&self) -> String {
+        self.expression
+            .as_ref()
+            .map(|e| e.string())
+            .unwrap_or_default()
     }
 }
 

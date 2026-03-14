@@ -1,8 +1,25 @@
 use crate::{
-    ast::{Identifier, LetStatement, Program, ReturnStatement, Statement},
+    ast::{
+        Expression, ExpressionStatement, Identifier, IntegerLiteral, LetStatement, Program,
+        ReturnStatement, Statement,
+    },
     lexer::Lexer,
     token::{Token, TokenType},
 };
+
+// Pratt Parser
+pub enum Precedence {
+    Lowest = 1,
+    Equals, // ==
+    // flase == (2 < 3)
+    LessGreater, // > or <
+    // 1 + (2 * 3)
+    Sum,
+    Product,
+    // (-X) * Y: -X is first Precedence
+    Prefix, // -X or !X
+    Call,   // fn()
+}
 
 pub struct Parser<'a> {
     lexer: Lexer<'a>, // parser has lexer ownership
@@ -49,16 +66,13 @@ impl<'a> Parser<'a> {
 
     fn parse_statement(&mut self) -> Option<Statement> {
         match self.cur_token.r#type {
-            TokenType::Let => self.parse_let_statement(),
-            TokenType::Return => self.parse_return_statement(),
-            _ => {
-                println!("unsupported type: {:?}", self.cur_token.r#type);
-                None
-            }
+            TokenType::Let => self.parse_let_statement().map(Statement::Let),
+            TokenType::Return => self.parse_return_statement().map(Statement::Return),
+            _ => self.parse_expression_statement().map(Statement::Expression),
         }
     }
 
-    fn parse_let_statement(&mut self) -> Option<Statement> {
+    fn parse_let_statement(&mut self) -> Option<LetStatement> {
         // Let Token
         let token = self.cur_token.clone();
 
@@ -81,14 +95,14 @@ impl<'a> Parser<'a> {
             self.next_token();
         }
 
-        Some(Statement::Let(LetStatement {
+        Some(LetStatement {
             token,
             name,
-            value: None, // None 而不是假数据
-        }))
+            value: None, // None
+        })
     }
 
-    fn parse_return_statement(&mut self) -> Option<Statement> {
+    fn parse_return_statement(&mut self) -> Option<ReturnStatement> {
         // Return Token
         let token = self.cur_token.clone();
 
@@ -101,7 +115,7 @@ impl<'a> Parser<'a> {
             self.next_token();
         }
 
-        Some(Statement::Return(ReturnStatement { token, value: None }))
+        Some(ReturnStatement { token, value: None })
     }
 
     fn expect_peek(&mut self, t: TokenType) -> bool {
@@ -121,6 +135,80 @@ impl<'a> Parser<'a> {
         );
 
         self.errors.push(msg);
+    }
+
+    /// 解析表达式语句（不以 let/return 开头的那行）
+    fn parse_expression_statement(&mut self) -> Option<ExpressionStatement> {
+        Some(ExpressionStatement {
+            token: self.cur_token.clone(),
+            expression: self.parse_expression(Precedence::Lowest),
+        })
+    }
+
+    //  表达式解析（Pratt 解析器核心)
+
+    /// 以指定的最低优先级解析一个表达式
+    ///
+    /// Pratt 解析的思路：
+    ///   1. 先用「前缀函数」把当前 token 变成一个表达式（左侧）
+    ///   2. 循环：只要右边运算符的优先级 > 传入的 precedence，
+    ///      就用「中缀函数」把左侧表达式和右侧合并成新的表达式
+    ///
+    /// 这样自然实现了运算符优先级和左结合性。
+    fn parse_expression(&mut self, precedence: Precedence) -> Option<Expression> {
+        // 第一步：找前缀解析函数
+        let mut left = self.parse_prefix()?;
+
+        // 第二步：循环处理中缀运算符
+        // （目前 infixFnMap 还是空的，这里为以后扩展预留）
+        // while !self.peek_token_is(TokenType::Semicolon) && precedence < self.peek_precedence() {
+        //     // 尝试用中缀函数合并
+        //     // 暂时没有注册任何中缀函数，所以直接 break
+        //     // 后续添加 + - * / == 等时在这里调用 parse_infix(left)
+        //     break;
+        // }
+
+        Some(left)
+    }
+
+    /// 根据当前 token 调用对应的「前缀解析函数」
+    ///
+    /// 等价于 Go 里的 `p.prefixFnMap[p.curToken.Type]`
+    fn parse_prefix(&mut self) -> Option<Expression> {
+        match self.cur_token.r#type {
+            TokenType::Ident => Some(self.parse_identifier()),
+            TokenType::Int => self.parse_integer_literal(),
+            _ => {
+                let msg = format!(
+                    "no prefix parse function for {:?} found",
+                    self.cur_token.r#type
+                );
+                self.errors.push(msg);
+                None
+            }
+        }
+    }
+
+    fn parse_identifier(&mut self) -> Expression {
+        Expression::Identifier(Identifier {
+            token: self.cur_token.clone(),
+            value: self.cur_token.literal.clone(),
+        })
+    }
+
+    /// 前缀函数：整数字面量
+    fn parse_integer_literal(&mut self) -> Option<Expression> {
+        match self.cur_token.literal.parse::<i64>() {
+            Ok(value) => Some(Expression::IntegerLiteral(IntegerLiteral {
+                token: self.cur_token.clone(),
+                value,
+            })),
+            Err(_) => {
+                let msg = format!("could not parse {:?} as integer", self.cur_token.literal);
+                self.errors.push(msg);
+                None
+            }
+        }
     }
 }
 

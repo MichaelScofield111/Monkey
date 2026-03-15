@@ -1,7 +1,7 @@
 use crate::{
     ast::{
-        Expression, ExpressionStatement, Identifier, IntegerLiteral, LetStatement, Program,
-        ReturnStatement, Statement,
+        Expression, ExpressionStatement, Identifier, InfixExpression, IntegerLiteral, LetStatement,
+        PrefixExpression, Program, ReturnStatement, Statement,
     },
     lexer::Lexer,
     token::{Token, TokenType},
@@ -19,6 +19,32 @@ pub enum Precedence {
     // (-X) * Y: -X is first Precedence
     Prefix, // -X or !X
     Call,   // fn()
+}
+
+impl Precedence {
+    fn as_num(&self) -> u8 {
+        match self {
+            Precedence::Lowest => 1,
+            Precedence::Equals => 2,
+            Precedence::LessGreater => 3,
+            Precedence::Sum => 4,
+            Precedence::Product => 5,
+            Precedence::Prefix => 6,
+            Precedence::Call => 7,
+        }
+    }
+
+    fn from_num(n: u8) -> Self {
+        match n {
+            2 => Precedence::Equals,
+            3 => Precedence::LessGreater,
+            4 => Precedence::Sum,
+            5 => Precedence::Product,
+            6 => Precedence::Prefix,
+            7 => Precedence::Call,
+            _ => Precedence::Lowest,
+        }
+    }
 }
 
 pub struct Parser<'a> {
@@ -39,6 +65,24 @@ impl<'a> Parser<'a> {
             peek_token,
             errors: Vec::new(),
         }
+    }
+
+    fn token_precedence(tt: &TokenType) -> u8 {
+        match tt {
+            TokenType::Eq | TokenType::Noteq => Precedence::Equals.as_num(),
+            TokenType::Lt | TokenType::Gt => Precedence::LessGreater.as_num(),
+            TokenType::Plus | TokenType::Minus => Precedence::Sum.as_num(),
+            TokenType::Asterisk | TokenType::Slash => Precedence::Product.as_num(),
+            _ => Precedence::Lowest.as_num(),
+        }
+    }
+
+    fn peek_precedence(&self) -> u8 {
+        Self::token_precedence(&self.peek_token.r#type)
+    }
+
+    fn cur_precedence(&self) -> u8 {
+        Self::token_precedence(&self.cur_token.r#type)
     }
 
     fn next_token(&mut self) {
@@ -139,10 +183,15 @@ impl<'a> Parser<'a> {
 
     /// 解析表达式语句（不以 let/return 开头的那行）
     fn parse_expression_statement(&mut self) -> Option<ExpressionStatement> {
-        Some(ExpressionStatement {
+        let stmt = Some(ExpressionStatement {
             token: self.cur_token.clone(),
             expression: self.parse_expression(Precedence::Lowest),
-        })
+        });
+
+        if self.peek_token_is(&TokenType::Semicolon) {
+            self.next_token();
+        }
+        stmt
     }
 
     //  表达式解析（Pratt 解析器核心)
@@ -157,16 +206,30 @@ impl<'a> Parser<'a> {
     /// 这样自然实现了运算符优先级和左结合性。
     fn parse_expression(&mut self, precedence: Precedence) -> Option<Expression> {
         // 第一步：找前缀解析函数
+        // !foo + bar -> !foo
         let mut left = self.parse_prefix()?;
 
         // 第二步：循环处理中缀运算符
+        // !foo + bar -> !foo + bar
         // （目前 infixFnMap 还是空的，这里为以后扩展预留）
-        // while !self.peek_token_is(TokenType::Semicolon) && precedence < self.peek_precedence() {
-        //     // 尝试用中缀函数合并
-        //     // 暂时没有注册任何中缀函数，所以直接 break
-        //     // 后续添加 + - * / == 等时在这里调用 parse_infix(left)
-        //     break;
-        // }
+        while !self.peek_token_is(&TokenType::Semicolon)
+            && precedence.as_num() < self.peek_precedence()
+        {
+            match self.peek_token.r#type {
+                TokenType::Plus
+                | TokenType::Minus
+                | TokenType::Asterisk
+                | TokenType::Slash
+                | TokenType::Eq
+                | TokenType::Noteq
+                | TokenType::Lt
+                | TokenType::Gt => {
+                    self.next_token(); // cur becomes the operator
+                    left = self.parse_infix_expression(left)?;
+                }
+                _ => break,
+            }
+        }
 
         Some(left)
     }
@@ -178,6 +241,8 @@ impl<'a> Parser<'a> {
         match self.cur_token.r#type {
             TokenType::Ident => Some(self.parse_identifier()),
             TokenType::Int => self.parse_integer_literal(),
+            TokenType::Bang => self.parse_prefix_expression(),
+            TokenType::Minus => self.parse_prefix_expression(),
             _ => {
                 let msg = format!(
                     "no prefix parse function for {:?} found",
@@ -209,6 +274,55 @@ impl<'a> Parser<'a> {
                 None
             }
         }
+    }
+
+    /// Prefix expression: `!<rhs>` or `-<rhs>`
+    ///
+    /// cur = operator (!  or -)
+    /// After parsing: cur = last token of rhs
+    fn parse_prefix_expression(&mut self) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        let op = self.cur_token.literal.clone();
+        self.next_token(); // move past operator; cur = first token of rhs
+
+        let rhs = self.parse_expression(Precedence::Prefix)?;
+
+        Some(Expression::Prefix(PrefixExpression {
+            token,
+            op,
+            rhs: Box::new(rhs),
+        }))
+    }
+
+    /// Infix expression: `<lhs> OP <rhs>`
+    ///
+    /// cur = operator (+, -, *, /, ==, !=, <, >)
+    /// lhs has already been parsed and is passed in.
+    fn parse_infix_expression(&mut self, lhs: Expression) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        let op = self.cur_token.literal.clone();
+
+        // Remember *this* operator's precedence as the new floor for rhs.
+        // Using the same precedence (not +1) gives left-associativity:
+        //   a + b + c  →  ((a + b) + c)
+        // because the second + is NOT strictly greater than Sum, so it
+        // does NOT get consumed by the inner parseExpression call.
+        let cur_prec = Precedence::from_num(self.cur_precedence());
+
+        self.next_token(); // move past operator; cur = first token of rhs
+
+        let rhs = self.parse_expression(cur_prec)?;
+
+        Some(Expression::Infix(InfixExpression {
+            token,
+            op,
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs),
+        }))
+    }
+
+    fn peek_token_is(&self, toke_type: &TokenType) -> bool {
+        &self.peek_token.r#type == toke_type
     }
 }
 
@@ -291,6 +405,93 @@ mod tests {
                 Statement::Return(_) => {}
                 _ => panic!("expected ReturnStatement"),
             }
+        }
+    }
+
+    #[test]
+    fn test_prefix_expressions() {
+        let cases = vec![("!a;", "!", "a"), ("-5;", "-", "5")];
+
+        for (input, expected_op, expected_rhs) in cases {
+            let l = Lexer::new(input);
+            let mut p = Parser::new(l);
+            let program = p.parse_program();
+            check_parser_errors(&p);
+
+            assert_eq!(program.statements.len(), 1);
+            match &program.statements[0] {
+                Statement::Expression(es) => match &es.expression {
+                    Some(Expression::Prefix(pre)) => {
+                        assert_eq!(pre.op, expected_op);
+                        assert_eq!(pre.rhs.string(), expected_rhs);
+                    }
+                    _ => panic!("expected PrefixExpression for input: {}", input),
+                },
+                _ => panic!("expected ExpressionStatement"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_infix_expressions() {
+        let cases: Vec<(&str, &str, &str, &str)> = vec![
+            ("a + b;", "a", "+", "b"),
+            ("a - b;", "a", "-", "b"),
+            ("a * b;", "a", "*", "b"),
+            ("a / b;", "a", "/", "b"),
+            ("a < b;", "a", "<", "b"),
+            ("a > b;", "a", ">", "b"),
+            ("a == b;", "a", "==", "b"),
+            ("a != b;", "a", "!=", "b"),
+        ];
+
+        for (input, expected_lhs, expected_op, expected_rhs) in cases {
+            let l = Lexer::new(input);
+            let mut p = Parser::new(l);
+            let program = p.parse_program();
+            check_parser_errors(&p);
+
+            assert_eq!(program.statements.len(), 1);
+            match &program.statements[0] {
+                Statement::Expression(es) => match &es.expression {
+                    Some(Expression::Infix(inf)) => {
+                        assert_eq!(inf.lhs.string(), expected_lhs);
+                        assert_eq!(inf.op, expected_op);
+                        assert_eq!(inf.rhs.string(), expected_rhs);
+                    }
+                    _ => panic!("expected InfixExpression for input: {}", input),
+                },
+                _ => panic!("expected ExpressionStatement"),
+            }
+        }
+    }
+
+    // ── operator precedence (verified via string() which adds parens)
+
+    #[test]
+    fn test_operator_precedence() {
+        let cases = vec![
+            // higher precedence binds tighter
+            ("a + b * c;", "(a + (b * c))"),
+            ("a * b + c;", "((a * b) + c)"),
+            // classic case from the doc comment
+            ("a * b + c * d;", "((a * b) + (c * d))"),
+            // left-associativity: same precedence folds left
+            ("a + b + c;", "((a + b) + c)"),
+            ("a - b - c;", "((a - b) - c)"),
+            // prefix binds tightest
+            ("!-a;", "(!(-a))"),
+            ("-a + b;", "((-a) + b)"),
+            // comparison
+            ("a + b == c + d;", "((a + b) == (c + d))"),
+        ];
+
+        for (input, expected) in cases {
+            let l = Lexer::new(input);
+            let mut p = Parser::new(l);
+            let program = p.parse_program();
+            check_parser_errors(&p);
+            assert_eq!(program.string(), expected, "input: {}", input);
         }
     }
 }

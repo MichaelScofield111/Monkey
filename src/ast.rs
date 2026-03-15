@@ -54,6 +54,8 @@ impl Node for Statement {
 pub enum Expression {
     Identifier(Identifier),
     IntegerLiteral(IntegerLiteral),
+    Infix(InfixExpression),
+    Prefix(PrefixExpression),
     // any Expression will be add
 }
 
@@ -62,6 +64,8 @@ impl Node for Expression {
         match self {
             Expression::Identifier(i) => i.token_literal(),
             Expression::IntegerLiteral(i) => i.token_literal(),
+            Expression::Infix(i) => i.token_literal(),
+            Expression::Prefix(i) => i.token_literal(),
         }
     }
 
@@ -69,6 +73,8 @@ impl Node for Expression {
         match self {
             Expression::Identifier(i) => i.string(),
             Expression::IntegerLiteral(i) => i.string(),
+            Expression::Infix(i) => i.string(),
+            Expression::Prefix(i) => i.string(),
         }
     }
 }
@@ -161,6 +167,41 @@ impl Node for ExpressionStatement {
             .as_ref()
             .map(|e| e.string())
             .unwrap_or_default()
+    }
+}
+
+//  InfixExpression
+// 例如: 5 + 3,  x * y,  a == b
+pub struct InfixExpression {
+    pub token: Token,         // 运算符 token，比如 {Plus, "+"}
+    pub lhs: Box<Expression>, // 左边
+    pub op: String,           // 运算符字符串: "+", "-", "*", "==", etc.
+    pub rhs: Box<Expression>, // 右边
+}
+
+impl Node for InfixExpression {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+    fn string(&self) -> String {
+        format!("({} {} {})", self.lhs.string(), self.op, self.rhs.string())
+    }
+}
+
+//  PrefixExpression
+// 例如: -5,  !true
+pub struct PrefixExpression {
+    pub token: Token,         // 运算符 token，比如 {Minus, "-"}
+    pub op: String,           // 运算符字符串: "-", "!"
+    pub rhs: Box<Expression>, // 右边的表达式
+}
+
+impl Node for PrefixExpression {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+    fn string(&self) -> String {
+        format!("({}{})", self.op, self.rhs.string())
     }
 }
 

@@ -25,11 +25,16 @@ impl Node for Program {
 }
 
 // Statement
+/// let x = 10;
+/// return x;
+/// x + 10 + 1;
+/// {....}
 #[derive(Debug)]
 pub enum Statement {
     Let(LetStatement),
     Return(ReturnStatement),
     Expression(ExpressionStatement),
+    BlockStatement(BlockStatement),
     // ... like Expression statement,
 }
 
@@ -39,6 +44,7 @@ impl Node for Statement {
             Statement::Let(s) => s.token_literal(),
             Statement::Return(s) => s.token_literal(),
             Statement::Expression(s) => s.token_literal(),
+            Statement::BlockStatement(s) => s.token_literal(),
         }
     }
     fn string(&self) -> String {
@@ -46,6 +52,7 @@ impl Node for Statement {
             Statement::Let(s) => s.string(),
             Statement::Return(s) => s.string(),
             Statement::Expression(s) => s.string(),
+            Statement::BlockStatement(s) => s.string(),
         }
     }
 }
@@ -59,6 +66,7 @@ pub enum Expression {
     Infix(InfixExpression),
     Prefix(PrefixExpression),
     Boolean(BooleanExpression),
+    IfExpression(IfExpression),
     // any Expression will be add
 }
 
@@ -70,6 +78,7 @@ impl Node for Expression {
             Expression::Infix(i) => i.token_literal(),
             Expression::Prefix(i) => i.token_literal(),
             Expression::Boolean(i) => i.token_literal(),
+            Expression::IfExpression(i) => i.token_literal(),
         }
     }
 
@@ -80,6 +89,7 @@ impl Node for Expression {
             Expression::Infix(i) => i.string(),
             Expression::Prefix(i) => i.string(),
             Expression::Boolean(i) => i.string(),
+            Expression::IfExpression(i) => i.string(),
         }
     }
 }
@@ -180,6 +190,25 @@ impl Node for ExpressionStatement {
     }
 }
 
+#[derive(Debug)]
+pub struct BlockStatement {
+    pub token: Token,
+    pub statements: Vec<Statement>,
+}
+
+impl Node for BlockStatement {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+    fn string(&self) -> String {
+        self.statements
+            .iter()
+            .map(|s| s.string())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}
+
 //  InfixExpression
 // 例如: 5 + 3,  x * y,  a == b
 #[derive(Debug)]
@@ -229,6 +258,32 @@ impl Node for BooleanExpression {
     }
     fn string(&self) -> String {
         format!("{}", self.value)
+    }
+}
+
+/// if <condition> <expressionStatement> else <expressionStatement>
+#[derive(Debug)]
+pub struct IfExpression {
+    pub token: Token,
+    pub condition: Box<Expression>,
+    pub if_block: Box<BlockStatement>,
+    pub else_block: Option<Box<BlockStatement>>,
+}
+
+impl Node for IfExpression {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+    fn string(&self) -> String {
+        let mut result = format!(
+            "if ({}) \n {{{}}} \n",
+            self.condition.string(),
+            self.if_block.string()
+        );
+        if let Some(else_block) = &self.else_block {
+            result.push_str(&format!(" else {{\n{}\n}}", else_block.string()));
+        }
+        result
     }
 }
 

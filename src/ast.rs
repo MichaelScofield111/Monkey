@@ -25,6 +25,7 @@ impl Node for Program {
 }
 
 // Statement
+#[derive(Debug)]
 pub enum Statement {
     Let(LetStatement),
     Return(ReturnStatement),
@@ -51,11 +52,13 @@ impl Node for Statement {
 
 // Expression
 // let x = 5  x: Indentifier,  5: Expression
+#[derive(Debug)]
 pub enum Expression {
     Identifier(Identifier),
     IntegerLiteral(IntegerLiteral),
     Infix(InfixExpression),
     Prefix(PrefixExpression),
+    Boolean(BooleanExpression),
     // any Expression will be add
 }
 
@@ -66,6 +69,7 @@ impl Node for Expression {
             Expression::IntegerLiteral(i) => i.token_literal(),
             Expression::Infix(i) => i.token_literal(),
             Expression::Prefix(i) => i.token_literal(),
+            Expression::Boolean(i) => i.token_literal(),
         }
     }
 
@@ -75,12 +79,14 @@ impl Node for Expression {
             Expression::IntegerLiteral(i) => i.string(),
             Expression::Infix(i) => i.string(),
             Expression::Prefix(i) => i.string(),
+            Expression::Boolean(i) => i.string(),
         }
     }
 }
 
 // ── Identifier
 // let x = 5  x: Indentifier,  5: Expression
+#[derive(Debug)]
 pub struct Identifier {
     pub token: Token, // IDENT token
     pub value: String,
@@ -96,6 +102,7 @@ impl Node for Identifier {
     }
 }
 
+#[derive(Debug)]
 pub struct IntegerLiteral {
     pub token: Token, // {INT, 5}
     pub value: i64,   // 5 -> 5
@@ -111,6 +118,7 @@ impl Node for IntegerLiteral {
 }
 
 // ── let <name> = <value>;
+#[derive(Debug)]
 pub struct LetStatement {
     pub token: Token, // LET token
     pub name: Identifier,
@@ -133,6 +141,7 @@ impl Node for LetStatement {
 }
 
 // ── return <value>;
+#[derive(Debug)]
 pub struct ReturnStatement {
     pub token: Token, // RETURN token
     /// `None` = 表达式部分暂时跳过
@@ -153,6 +162,7 @@ impl Node for ReturnStatement {
 }
 
 // ExpressionStatement
+#[derive(Debug)]
 pub struct ExpressionStatement {
     pub token: Token,
     pub expression: Option<Expression>,
@@ -172,6 +182,7 @@ impl Node for ExpressionStatement {
 
 //  InfixExpression
 // 例如: 5 + 3,  x * y,  a == b
+#[derive(Debug)]
 pub struct InfixExpression {
     pub token: Token,         // 运算符 token，比如 {Plus, "+"}
     pub lhs: Box<Expression>, // 左边
@@ -190,6 +201,7 @@ impl Node for InfixExpression {
 
 //  PrefixExpression
 // 例如: -5,  !true
+#[derive(Debug)]
 pub struct PrefixExpression {
     pub token: Token,         // 运算符 token，比如 {Minus, "-"}
     pub op: String,           // 运算符字符串: "-", "!"
@@ -202,6 +214,21 @@ impl Node for PrefixExpression {
     }
     fn string(&self) -> String {
         format!("({}{})", self.op, self.rhs.string())
+    }
+}
+
+#[derive(Debug)]
+pub struct BooleanExpression {
+    pub token: Token,
+    pub value: bool,
+}
+
+impl Node for BooleanExpression {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+    fn string(&self) -> String {
+        format!("{}", self.value)
     }
 }
 

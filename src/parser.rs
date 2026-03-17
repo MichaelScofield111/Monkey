@@ -1,7 +1,8 @@
 use crate::{
     ast::{
-        BooleanExpression, Expression, ExpressionStatement, Identifier, InfixExpression,
-        IntegerLiteral, LetStatement, PrefixExpression, Program, ReturnStatement, Statement,
+        BlockStatement, BooleanExpression, Expression, ExpressionStatement, Identifier,
+        InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, Program, ReturnStatement,
+        Statement,
     },
     lexer::Lexer,
     token::{Token, TokenType},
@@ -261,12 +262,13 @@ impl<'a> Parser<'a> {
     /// 根据当前 token 调用对应的「前缀解析函数」
     fn parse_prefix(&mut self) -> Option<Expression> {
         match self.cur_token.r#type {
-            TokenType::Ident => Some(self.parse_identifier()),
+            TokenType::Ident => self.parse_identifier(),
             TokenType::Int => self.parse_integer_literal(),
             TokenType::Bang => self.parse_prefix_expression(),
             TokenType::Minus => self.parse_prefix_expression(),
             TokenType::False => self.parse_boolean(),
             TokenType::True => self.parse_boolean(),
+            TokenType::Lparen => self.parse_grouped_expression(),
             _ => {
                 let msg = format!(
                     "no prefix parse function for {:?} found",
@@ -278,11 +280,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_identifier(&mut self) -> Expression {
-        Expression::Identifier(Identifier {
+    fn parse_identifier(&mut self) -> Option<Expression> {
+        Some(Expression::Identifier(Identifier {
             token: self.cur_token.clone(),
             value: self.cur_token.literal.clone(),
-        })
+        }))
     }
 
     /// 前缀函数：整数字面量
@@ -326,8 +328,23 @@ impl<'a> Parser<'a> {
         }))
     }
 
+    fn parse_grouped_expression(&mut self) -> Option<Expression> {
+        self.next_token();
+
+        let grouped = self.parse_expression(Precedence::Lowest);
+        if !self.expect_peek(TokenType::Rbrace) {
+            return None;
+        }
+
+        grouped
+    }
+
     fn peek_token_is(&self, toke_type: &TokenType) -> bool {
         &self.peek_token.r#type == toke_type
+    }
+
+    fn current_token_is(&self, toke_type: &TokenType) -> bool {
+        &self.cur_token.r#type == toke_type
     }
 }
 

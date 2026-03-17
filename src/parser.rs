@@ -1,8 +1,8 @@
 use crate::{
     ast::{
         BlockStatement, BooleanExpression, Expression, ExpressionStatement, Identifier,
-        InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, Program, ReturnStatement,
-        Statement,
+        IfExpression, InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, Program,
+        ReturnStatement, Statement,
     },
     lexer::Lexer,
     token::{Token, TokenType},
@@ -328,7 +328,68 @@ impl<'a> Parser<'a> {
         }))
     }
 
+    /// let foo = if (x>y) {x} return {y};
+    /// if (<condition>) {<block>} else {<block>}
+    fn parse_ifelse_expression(&mut self) -> Option<Expression> {
+        if !self.expect_peek(TokenType::Lbrace) {
+            return None;
+        }
+        self.next_token();
+
+        // parse condition
+        let condition = self.parse_expression(Precedence::Lowest)?;
+
+        // parse branch
+        if !self.expect_peek(TokenType::Lparen) {
+            return None;
+        }
+
+        let block_if = self.parse_block_statement()?;
+
+        // parse else branch
+        if self.peek_token_is(&TokenType::Else) {
+            self.next_token();
+            // else {}
+
+            if !self.peek_token_is(&TokenType::Lbrace) {
+                return None;
+            }
+
+            let block_else = self.parse_block_statement()?;
+
+            return Some(Expression::IfExpression(IfExpression {
+                token: self.cur_token.clone(),
+                condition: Box::new(condition),
+                if_block: Box::new(block_if),
+                else_block: Some(Box::new(block_else)),
+            }));
+        }
+        None
+    }
+
+    fn parse_block_statement(&mut self) -> Option<BlockStatement> {
+        let mut block = BlockStatement {
+            token: self.cur_token.clone(), // "{"
+            statements: Vec::new(),
+        };
+
+        self.next_token();
+
+        while !self.current_token_is(&TokenType::Rbrace) && !self.current_token_is(&TokenType::Eof)
+        {
+            let stmt = self.parse_statement();
+            if let Some(stmt) = stmt {
+                block.statements.push(stmt);
+            } else {
+                return None;
+            }
+        }
+
+        Some(block)
+    }
+
     fn parse_grouped_expression(&mut self) -> Option<Expression> {
+        // read "("
         self.next_token();
 
         let grouped = self.parse_expression(Precedence::Lowest);

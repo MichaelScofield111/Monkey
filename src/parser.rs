@@ -331,7 +331,8 @@ impl<'a> Parser<'a> {
     /// let foo = if (x>y) {x} return {y};
     /// if (<condition>) {<block>} else {<block>}
     fn parse_ifelse_expression(&mut self) -> Option<Expression> {
-        if !self.expect_peek(TokenType::Lbrace) {
+        let token = self.cur_token.clone();
+        if !self.expect_peek(TokenType::Lparen) {
             return None;
         }
         self.next_token();
@@ -339,32 +340,33 @@ impl<'a> Parser<'a> {
         // parse condition
         let condition = self.parse_expression(Precedence::Lowest)?;
 
-        // parse branch
-        if !self.expect_peek(TokenType::Lparen) {
+        if !self.expect_peek(TokenType::Rparen) {
             return None;
         }
 
-        let block_if = self.parse_block_statement()?;
-
-        // parse else branch
-        if self.peek_token_is(&TokenType::Else) {
-            self.next_token();
-            // else {}
-
-            if !self.peek_token_is(&TokenType::Lbrace) {
-                return None;
-            }
-
-            let block_else = self.parse_block_statement()?;
-
-            return Some(Expression::IfExpression(IfExpression {
-                token: self.cur_token.clone(),
-                condition: Box::new(condition),
-                if_block: Box::new(block_if),
-                else_block: Some(Box::new(block_else)),
-            }));
+        if !self.expect_peek(TokenType::Lbrace) {
+            return None;
         }
-        None
+
+        // if block
+        let if_block = self.parse_block_statement()?;
+
+        // else
+        let else_block = self
+            .peek_token_is(&TokenType::Else)
+            .then(|| {
+                self.next_token();
+                self.expect_peek(TokenType::Lbrace);
+                Some(Box::new(self.parse_block_statement()?))
+            })
+            .flatten();
+
+        Some(Expression::IfExpression(IfExpression {
+            token,
+            condition: Box::new(condition),
+            if_block: Box::new(if_block),
+            else_block,
+        }))
     }
 
     fn parse_block_statement(&mut self) -> Option<BlockStatement> {

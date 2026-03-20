@@ -67,6 +67,7 @@ pub enum Expression {
     Prefix(PrefixExpression),
     Boolean(BooleanExpression),
     IfExpression(IfExpression),
+    FunctionLiteral(FunctionLiteral),
     // any Expression will be add
 }
 
@@ -79,6 +80,7 @@ impl Node for Expression {
             Expression::Prefix(i) => i.token_literal(),
             Expression::Boolean(i) => i.token_literal(),
             Expression::IfExpression(i) => i.token_literal(),
+            Expression::FunctionLiteral(i) => i.token_literal(),
         }
     }
 
@@ -90,6 +92,7 @@ impl Node for Expression {
             Expression::Prefix(i) => i.string(),
             Expression::Boolean(i) => i.string(),
             Expression::IfExpression(i) => i.string(),
+            Expression::FunctionLiteral(i) => i.string(),
         }
     }
 }
@@ -206,6 +209,30 @@ impl Node for BlockStatement {
             .map(|s| s.string())
             .collect::<Vec<_>>()
             .join("\n")
+    }
+}
+
+#[derive(Debug)]
+pub struct FunctionLiteral {
+    pub token: Token,
+    pub parameters: Vec<Expression>,
+    pub body: Box<BlockStatement>,
+}
+
+impl Node for FunctionLiteral {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+    fn string(&self) -> String {
+        format!(
+            "fn({}) {}",
+            self.parameters
+                .iter()
+                .map(|p| p.string())
+                .collect::<Vec<_>>()
+                .join(", "),
+            self.body.string()
+        )
     }
 }
 

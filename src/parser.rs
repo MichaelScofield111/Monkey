@@ -1,8 +1,8 @@
 use crate::{
     ast::{
-        BlockStatement, BooleanExpression, Expression, ExpressionStatement, Identifier,
-        IfExpression, InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, Program,
-        ReturnStatement, Statement,
+        BlockStatement, BooleanExpression, Expression, ExpressionStatement, FunctionLiteral,
+        Identifier, IfExpression, InfixExpression, IntegerLiteral, LetStatement, PrefixExpression,
+        Program, ReturnStatement, Statement,
     },
     lexer::Lexer,
     token::{Token, TokenType},
@@ -390,6 +390,65 @@ impl<'a> Parser<'a> {
         Some(block)
     }
 
+    fn parse_function_parameters(&mut self) -> Option<Vec<Expression>> {
+        if self.peek_token_is(&TokenType::Rparen) {
+            // no parameters
+            self.next_token();
+            return None;
+        }
+
+        // to get parameters
+        self.next_token();
+        let mut parameters = Vec::new();
+        if let Some(v) = self.parse_identifier() {
+            parameters.push(v);
+        }
+
+        while self.peek_token_is(&TokenType::Comma) {
+            // eat comma
+            self.next_token();
+            // skip comma
+            self.next_token();
+            if let Some(v) = self.parse_identifier() {
+                parameters.push(v);
+            }
+        }
+
+        if !self.expect_peek(TokenType::Rparen) {
+            return None;
+        }
+
+        Some(parameters)
+    }
+
+    // fn <Params list> <Body>
+    // <Params List> = (Indentifier1, Indentifier2...)
+    // let f = fn(a, b) {return a + b}
+    fn parse_function_literal(&mut self) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        if self.expect_peek(TokenType::Lparen) {
+            return None;
+        }
+
+        let parameters = self.parse_function_parameters();
+        if !self.expect_peek(TokenType::Lbrace) {
+            return None;
+        }
+
+        let body = self.parse_block_statement();
+
+        //TODO remove
+        if !self.current_token_is(&TokenType::Rbrace) {
+            panic!("the {{ is no close");
+        }
+
+        Some(Expression::FunctionLiteral(FunctionLiteral {
+            token,
+            parameters: parameters.unwrap(),
+            body: Box::new(body.unwrap()),
+        }))
+    }
+
     fn parse_grouped_expression(&mut self) -> Option<Expression> {
         // read "("
         self.next_token();
@@ -619,6 +678,16 @@ mod tests {
                 },
                 other => panic!("expected ExpressionStatement, got {:?}", other),
             }
+        }
+    }
+
+    #[test]
+    fn test_function_expression() {
+        let cases = vec![("fn(a, b){a+b}", "TODO")];
+        for (input, expected) in cases {
+            let l = Lexer::new(input);
+            let mut p = Parser::new(l);
+            check_parser_errors(&p);
         }
     }
 }

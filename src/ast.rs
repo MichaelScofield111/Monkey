@@ -68,7 +68,7 @@ pub enum Expression {
     Boolean(BooleanExpression),
     IfExpression(IfExpression),
     FunctionLiteral(FunctionLiteral),
-    // any Expression will be add
+    CallExpression(CallExpression),
 }
 
 impl Node for Expression {
@@ -81,6 +81,7 @@ impl Node for Expression {
             Expression::Boolean(i) => i.token_literal(),
             Expression::IfExpression(i) => i.token_literal(),
             Expression::FunctionLiteral(i) => i.token_literal(),
+            Expression::CallExpression(i) => i.token_literal(),
         }
     }
 
@@ -93,6 +94,7 @@ impl Node for Expression {
             Expression::Boolean(i) => i.string(),
             Expression::IfExpression(i) => i.string(),
             Expression::FunctionLiteral(i) => i.string(),
+            Expression::CallExpression(i) => i.string(),
         }
     }
 }
@@ -285,6 +287,30 @@ impl Node for BooleanExpression {
     }
     fn string(&self) -> String {
         format!("{}", self.value)
+    }
+}
+
+#[derive(Debug)]
+pub struct CallExpression {
+    pub token: Token,
+    pub arugument: Vec<Expression>,
+    pub function: Box<Expression>,
+}
+
+impl Node for CallExpression {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+    fn string(&self) -> String {
+        format!(
+            "{}({})",
+            self.function.string(),
+            self.arugument
+                .iter()
+                .map(|e| e.string())
+                .collect::<Vec<_>>()
+                .join(",")
+        )
     }
 }
 

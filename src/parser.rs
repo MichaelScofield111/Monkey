@@ -1,8 +1,8 @@
 use crate::{
     ast::{
-        BlockStatement, BooleanExpression, Expression, ExpressionStatement, FunctionLiteral,
-        Identifier, IfExpression, InfixExpression, IntegerLiteral, LetStatement, PrefixExpression,
-        Program, ReturnStatement, Statement,
+        BlockStatement, BooleanExpression, CallExpression, Expression, ExpressionStatement,
+        FunctionLiteral, Identifier, IfExpression, InfixExpression, IntegerLiteral, LetStatement,
+        PrefixExpression, Program, ReturnStatement, Statement,
     },
     lexer::Lexer,
     token::{Token, TokenType},
@@ -74,6 +74,7 @@ impl<'a> Parser<'a> {
             TokenType::Lt | TokenType::Gt => Precedence::LessGreater.as_num(),
             TokenType::Plus | TokenType::Minus => Precedence::Sum.as_num(),
             TokenType::Asterisk | TokenType::Slash => Precedence::Product.as_num(),
+            TokenType::Lparen => Precedence::Call.as_num(),
             _ => Precedence::Lowest.as_num(),
         }
     }
@@ -225,6 +226,10 @@ impl<'a> Parser<'a> {
                     // left need to cal with next token
                     left = self.parse_infix_expression(left)?;
                 }
+                TokenType::Lparen => {
+                    self.next_token();
+                    left = self.parse_infix_expression(left)?;
+                }
                 _ => break,
             }
         }
@@ -239,6 +244,12 @@ impl<'a> Parser<'a> {
     fn parse_infix_expression(&mut self, lhs: Expression) -> Option<Expression> {
         let token = self.cur_token.clone();
         let op = self.cur_token.literal.clone();
+
+        // -add(10 + 2)
+        // lhs = add
+        if self.current_token_is(&TokenType::Lparen) {
+            return self.parse_function_call(lhs);
+        }
 
         // Remember *this* operator's precedence as the new floor for rhs.
         // Using the same precedence (not +1) gives left-associativity:
@@ -468,6 +479,47 @@ impl<'a> Parser<'a> {
     fn current_token_is(&self, toke_type: &TokenType) -> bool {
         &self.cur_token.r#type == toke_type
     }
+
+    // parseFunctionCall is a special case for parseInfixExpression
+    fn parse_function_call(&mut self, function: Expression) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        let args = self.parse_call_arguments().unwrap_or_default();
+        Some(Expression::CallExpression(CallExpression {
+            token,
+            arugument: args,
+            function: Box::new(function),
+        }))
+    }
+
+    fn parse_call_arguments(&mut self) -> Option<Vec<Expression>> {
+        // add(1, add(1+2), 3)
+        if self.peek_token_is(&TokenType::Rparen) {
+            // no params
+            self.next_token();
+            return None;
+        }
+
+        self.next_token();
+        let mut args = vec![];
+
+        if let Some(arg) = self.parse_expression(Precedence::Lowest) {
+            args.push(arg);
+        }
+
+        while !self.peek_token_is(&TokenType::Comma) {
+            self.next_token();
+            self.next_token();
+            if let Some(arg) = self.parse_expression(Precedence::Lowest) {
+                args.push(arg);
+            }
+        }
+
+        if !self.expect_peek(TokenType::Rparen) {
+            return None;
+        }
+
+        Some(args)
+    }
 }
 
 #[cfg(test)]
@@ -682,12 +734,42 @@ mod tests {
     }
 
     #[test]
-    fn test_function_expression() {
-        let cases = vec![("fn(a, b){a+b}", "TODO")];
+    fn test_call_expression() {
+        let cases = vec![
+            (
+                "add(1, 2+3, 4 + 5*6, 7*8+10)",
+                "add(1,(2 + 3),(4 + (5 * 6)),((7 * 8) + 10))",
+            ),
+            ("non()", "non()"),
+            ("negate(1)", "negate(1)"),
+        ];
+
         for (input, expected) in cases {
             let l = Lexer::new(input);
             let mut p = Parser::new(l);
+            let program = p.parse_program();
             check_parser_errors(&p);
+
+            assert_eq!(
+                program.statements.len(),
+                1,
+                "expected 1 statement, got {} for input: {}",
+                program.statements.len(),
+                input
+            );
+
+            match &program.statements[0] {
+                Statement::Expression(es) => match &es.expression {
+                    Some(Expression::CallExpression(call)) => {
+                        assert_eq!(call.string(), expected, "input: {}", input);
+                    }
+                    other => panic!(
+                        "expected CallExpression, got {:?} for input: {}",
+                        other, input
+                    ),
+                },
+                other => panic!("expected ExpressionStatement, got {:?}", other),
+            }
         }
     }
 }

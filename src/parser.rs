@@ -221,13 +221,10 @@ impl<'a> Parser<'a> {
                 | TokenType::Eq
                 | TokenType::Noteq
                 | TokenType::Lt
-                | TokenType::Gt => {
+                | TokenType::Gt
+                | TokenType::Lparen => {
                     self.next_token(); // cur becomes the operator
                     // left need to cal with next token
-                    left = self.parse_infix_expression(left)?;
-                }
-                TokenType::Lparen => {
-                    self.next_token();
                     left = self.parse_infix_expression(left)?;
                 }
                 _ => break,
@@ -506,7 +503,7 @@ impl<'a> Parser<'a> {
             args.push(arg);
         }
 
-        while !self.peek_token_is(&TokenType::Comma) {
+        while self.peek_token_is(&TokenType::Comma) {
             self.next_token();
             self.next_token();
             if let Some(arg) = self.parse_expression(Precedence::Lowest) {

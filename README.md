@@ -19,3 +19,7 @@ parse(op, remain[1:])
 fn <Params list> <Body>
 <Params List> = (Indentifier1, Indentifier2...)
 let f = fn(a, b) {return a + b}
+
+## Eval
+
+eval(ast) => object

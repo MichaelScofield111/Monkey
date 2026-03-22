@@ -141,16 +141,13 @@ impl<'a> Parser<'a> {
             return None;
         }
 
-        // skip expression until semicolon
-        while self.cur_token.r#type != TokenType::Semicolon {
-            self.next_token();
+        self.next_token();
+        let value = self.parse_expression(Precedence::Lowest);
+        if !self.expect_peek(TokenType::Semicolon) {
+            return None;
         }
 
-        Some(LetStatement {
-            token,
-            name,
-            value: None, // None
-        })
+        Some(LetStatement { token, name, value })
     }
 
     fn parse_return_statement(&mut self) -> Option<ReturnStatement> {
@@ -159,14 +156,12 @@ impl<'a> Parser<'a> {
 
         self.next_token(); // 跳过 return，移到表达式第一个 token
 
-        // TODO: 暂时跳过表达式，直到遇到分号
-        while self.cur_token.r#type != TokenType::Semicolon
-            && self.cur_token.r#type != TokenType::Eof
-        {
-            self.next_token();
+        let value = self.parse_expression(Precedence::Lowest);
+        if !self.expect_peek(TokenType::Semicolon) {
+            return None;
         }
 
-        Some(ReturnStatement { token, value: None })
+        Some(ReturnStatement { token, value })
     }
 
     fn expect_peek(&mut self, t: TokenType) -> bool {
@@ -496,6 +491,7 @@ impl<'a> Parser<'a> {
             return None;
         }
 
+        // "("
         self.next_token();
         let mut args = vec![];
 

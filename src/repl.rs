@@ -1,12 +1,26 @@
 use std::io::{self, BufRead, Write};
 
-use crate::{lexer::Lexer, token::TokenType};
+use crate::{ast::Node, lexer::Lexer, parser::Parser, token::TokenType};
 
 const PROMPT: &str = ">>";
 
-pub fn start<R: BufRead, W: Write>(mut input: R, mut output: W) -> io::Result<()> {
-    let mut line = String::new();
+const MONKEY_FACE: &str = r#"            __,__
+   .--.  .-"     "-.  .--.
+  / .. \/  .-. .-.  \/ .. \
+ | |  '|  /   Y   \  |'  | |
+ | \   \  \ 0 | 0 /  /   / |
+  \ '- ,\.-"""""""-./, -' /
+   ''-' /_   ^ ^   _\ '-''
+       |  \._   _./  |
+       \   \ '~' /   /
+        '._ '-=-' _.'
+           '-----'
+"#;
 
+pub fn start<R: BufRead, W: Write>(mut input: R, mut output: W) -> io::Result<()> {
+    writeln!(output, "{}", MONKEY_FACE)?;
+
+    let mut line = String::new();
     loop {
         write!(output, "{}", PROMPT)?;
         output.flush()?;
@@ -17,14 +31,22 @@ pub fn start<R: BufRead, W: Write>(mut input: R, mut output: W) -> io::Result<()
             return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF"));
         }
 
-        let mut l = Lexer::new(&line);
-        loop {
-            let token = l.next_token();
-            if token.r#type == TokenType::Eof {
-                break;
-            }
+        let l = Lexer::new(&line);
+        let mut p = Parser::new(l);
+        let program = p.parse_program();
 
-            writeln!(output, "{:?}", token)?;
+        if !p.errors.is_empty() {
+            print_errors(&mut output, &p.errors)?;
+            continue;
         }
+
+        writeln!(output, "{}", program.string())?;
     }
+}
+
+fn print_errors<W: Write>(output: &mut W, errs: &[String]) -> io::Result<()> {
+    for msg in errs {
+        writeln!(output, "\t{}", msg)?;
+    }
+    Ok(())
 }

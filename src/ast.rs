@@ -8,6 +8,7 @@ pub trait Node {
 
 // Programe == File and Statement like sub node
 // root
+#[derive(Debug)]
 pub struct Program {
     pub statements: Vec<Statement>,
 }

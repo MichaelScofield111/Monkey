@@ -49,11 +49,11 @@ impl Precedence {
 }
 
 pub struct Parser<'a> {
-    lexer: Lexer<'a>, // parser has lexer ownership
+    pub lexer: Lexer<'a>, // parser has lexer ownership
 
-    cur_token: Token,
-    peek_token: Token,
-    errors: Vec<String>,
+    pub cur_token: Token,
+    pub peek_token: Token,
+    pub errors: Vec<String>,
 }
 
 impl<'a> Parser<'a> {
@@ -92,7 +92,7 @@ impl<'a> Parser<'a> {
         self.peek_token = self.lexer.next_token();
     }
 
-    fn parse_program(&mut self) -> Program {
+    pub fn parse_program(&mut self) -> Program {
         let mut program = Program {
             statements: Vec::new(),
         };

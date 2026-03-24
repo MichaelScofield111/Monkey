@@ -457,7 +457,7 @@ impl<'a> Parser<'a> {
         self.next_token();
 
         let grouped = self.parse_expression(Precedence::Lowest);
-        if !self.expect_peek(TokenType::Rbrace) {
+        if !self.expect_peek(TokenType::Rparen) {
             return None;
         }
 

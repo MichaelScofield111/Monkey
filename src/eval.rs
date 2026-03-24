@@ -33,7 +33,88 @@ fn eval_expression(expr: &Expression) -> Result<Object, String> {
         // integer
         Expression::IntegerLiteral(i) => Ok(Object::Integer(Integer { value: i.value })),
         Expression::Boolean(i) => Ok(Object::Boolean(Boolean { value: i.value })),
+        Expression::Prefix(prefix) => {
+            let rhs = eval_expression(&prefix.rhs)?;
+            eval_prefix_expression(&prefix.op, rhs)
+        }
+        Expression::Infix(infix) => {
+            let lhs = eval_expression(&infix.lhs)?;
+            let rhs = eval_expression(&infix.rhs)?;
+            eval_infix_expression(&infix.op, lhs, rhs)
+        }
         _ => Err(format!("unsupported expression type: {:?}", expr)),
+    }
+}
+
+fn eval_prefix_expression(op: &str, rhs: Object) -> Result<Object, String> {
+    match op {
+        "!" => match rhs {
+            Object::Boolean(b) => Ok(Object::Boolean(Boolean { value: !b.value })),
+            Object::Null(_) => Ok(Object::Boolean(Boolean { value: true })),
+            Object::Integer(i) => Ok(Object::Boolean(Boolean {
+                value: i.value == 0,
+            })), // !0 => true, !非0 => false
+        },
+        "-" => match rhs {
+            Object::Integer(i) => Ok(Object::Integer(Integer { value: -i.value })),
+            other => Err(format!("expected integer after '-', got: {:?}", other)),
+        },
+        _ => Err(format!("unsupported prefix operator: {}", op)),
+    }
+}
+
+// a + b
+fn eval_infix_expression(op: &str, lhs: Object, rhs: Object) -> Result<Object, String> {
+    match (&lhs, &rhs) {
+        (Object::Integer(l), Object::Integer(r)) => eval_infix_integer(l, r, op),
+        (Object::Boolean(l), Object::Boolean(r)) => eval_infix_boolean(l, r, op),
+        _ => Err(format!(
+            "expected integer operands for infix operator: {}",
+            op
+        )),
+    }
+}
+
+// a + b
+fn eval_infix_integer(left: &Integer, right: &Integer, op: &str) -> Result<Object, String> {
+    match op {
+        "+" => Ok(Object::Integer(Integer {
+            value: left.value + right.value,
+        })),
+        "-" => Ok(Object::Integer(Integer {
+            value: left.value - right.value,
+        })),
+        "*" => Ok(Object::Integer(Integer {
+            value: left.value * right.value,
+        })),
+        "/" => Ok(Object::Integer(Integer {
+            value: left.value / right.value,
+        })),
+        "==" => Ok(Object::Boolean(Boolean {
+            value: left.value == right.value,
+        })),
+        "!=" => Ok(Object::Boolean(Boolean {
+            value: left.value != right.value,
+        })),
+        "<" => Ok(Object::Boolean(Boolean {
+            value: left.value < right.value,
+        })),
+        ">" => Ok(Object::Boolean(Boolean {
+            value: left.value > right.value,
+        })),
+        _ => Err(format!("unsupported infix operator: {}", op)),
+    }
+}
+
+fn eval_infix_boolean(l: &Boolean, r: &Boolean, op: &str) -> Result<Object, String> {
+    match op {
+        "==" => Ok(Object::Boolean(Boolean {
+            value: l.value == r.value,
+        })),
+        "!=" => Ok(Object::Boolean(Boolean {
+            value: l.value != r.value,
+        })),
+        _ => Err(format!("unsupported infix operator: {}", op)),
     }
 }
 
@@ -65,6 +146,58 @@ mod tests {
         }
     }
 
+    fn assert_boolean_object(obj: &Object, expected: bool) {
+        match obj {
+            Object::Boolean(b) => {
+                assert_eq!(b.value, expected, "boolean value mismatch");
+            }
+            other => panic!("expected Boolean object, got: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_eval_bang() {
+        struct TestCase {
+            input: &'static str,
+            expected: bool,
+            has_error: bool,
+        }
+        let tests = vec![
+            TestCase {
+                input: "!true",
+                expected: false,
+                has_error: false,
+            },
+            TestCase {
+                input: "!false",
+                expected: true,
+                has_error: false,
+            },
+            TestCase {
+                input: "!5",
+                expected: false,
+                has_error: false,
+            },
+            TestCase {
+                input: "!0",
+                expected: true,
+                has_error: false,
+            },
+        ];
+
+        for tc in &tests {
+            let result = string_to_ast(tc.input);
+            assert_eq!(
+                tc.has_error,
+                result.is_err(),
+                "expected error: {}",
+                tc.input
+            );
+            if let Ok(obj) = result {
+                assert_boolean_object(&obj, tc.expected);
+            }
+        }
+    }
     #[test]
     fn test_eval_integer() {
         struct TestCase {
@@ -85,10 +218,50 @@ mod tests {
                 has_error: false,
             },
             TestCase {
+                input: "-5",
+                expected: -5,
+                has_error: false,
+            },
+            TestCase {
+                input: "-10",
+                expected: -10,
+                has_error: false,
+            },
+            TestCase {
+                input: "1+2+3+4-10",
+                expected: 0,
+                has_error: false,
+            },
+            TestCase {
+                input: "-1+2*-2",
+                expected: -5,
+                has_error: false,
+            },
+            TestCase {
+                input: "10/2*3",
+                expected: 15,
+                has_error: false,
+            },
+            TestCase {
+                input: "(1+3)*-4",
+                expected: -16,
+                has_error: false,
+            },
+            TestCase {
+                input: "(4+3)*(4)+-29",
+                expected: -1,
+                has_error: false,
+            },
+            TestCase {
                 input: "111111111111111111111111111111111111",
                 expected: 0,
                 has_error: true,
             }, // 溢出应报错
+            TestCase {
+                input: "-true",
+                expected: 0,
+                has_error: true,
+            }, // should report an error
         ];
 
         for tc in &tests {
@@ -100,9 +273,134 @@ mod tests {
                 tc.input,
                 result
             );
-
             if let Ok(obj) = result {
                 assert_integer_object(&obj, tc.expected);
+            }
+        }
+    }
+
+    #[test]
+    fn test_eval_boolean() {
+        struct TestCase {
+            input: &'static str,
+            expected: bool,
+            has_error: bool,
+        }
+
+        let tests = vec![
+            TestCase {
+                input: "true",
+                expected: true,
+                has_error: false,
+            },
+            TestCase {
+                input: "false",
+                expected: false,
+                has_error: false,
+            },
+            TestCase {
+                input: "true == true",
+                expected: true,
+                has_error: false,
+            },
+            TestCase {
+                input: "false == false",
+                expected: true,
+                has_error: false,
+            },
+            TestCase {
+                input: "true != false",
+                expected: true,
+                has_error: false,
+            },
+            TestCase {
+                input: "false != true",
+                expected: true,
+                has_error: false,
+            },
+            TestCase {
+                input: "true != true",
+                expected: false,
+                has_error: false,
+            },
+            TestCase {
+                input: "false != false",
+                expected: false,
+                has_error: false,
+            },
+            TestCase {
+                input: "true == false",
+                expected: false,
+                has_error: false,
+            },
+            TestCase {
+                input: "false == true",
+                expected: false,
+                has_error: false,
+            },
+            TestCase {
+                input: "1 < 2",
+                expected: true,
+                has_error: false,
+            },
+            TestCase {
+                input: "1 > 2",
+                expected: false,
+                has_error: false,
+            },
+            TestCase {
+                input: "2 == 2",
+                expected: true,
+                has_error: false,
+            },
+            TestCase {
+                input: "2 != 2",
+                expected: false,
+                has_error: false,
+            },
+            TestCase {
+                input: "2 == (1+1)",
+                expected: true,
+                has_error: false,
+            },
+            TestCase {
+                input: "3 == 2 * (1+1)",
+                expected: false,
+                has_error: false,
+            },
+            TestCase {
+                input: "3 != 2 * (1+1)",
+                expected: true,
+                has_error: false,
+            },
+            TestCase {
+                input: "TRUE",
+                expected: false,
+                has_error: true,
+            }, // should report an error
+            TestCase {
+                input: "false < true",
+                expected: false,
+                has_error: true,
+            },
+            TestCase {
+                input: "false > true",
+                expected: false,
+                has_error: true,
+            },
+        ];
+
+        for tc in &tests {
+            let result = string_to_ast(tc.input);
+            assert_eq!(
+                tc.has_error,
+                result.is_err(),
+                "input='{}', err={:?}",
+                tc.input,
+                result
+            );
+            if let Ok(obj) = result {
+                assert_boolean_object(&obj, tc.expected);
             }
         }
     }

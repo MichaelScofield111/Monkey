@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Expression, Program, Statement},
+    ast::{Expression, IfExpression, Program, Statement},
     object::{Boolean, Integer, Null, Object},
 };
 
@@ -33,6 +33,8 @@ fn eval_expression(expr: &Expression) -> Result<Object, String> {
         // integer
         Expression::IntegerLiteral(i) => Ok(Object::Integer(Integer { value: i.value })),
         Expression::Boolean(i) => Ok(Object::Boolean(Boolean { value: i.value })),
+        // parser if() {..} else {..}
+        Expression::IfExpression(i) => eval_ifexpression(i),
         Expression::Prefix(prefix) => {
             let rhs = eval_expression(&prefix.rhs)?;
             eval_prefix_expression(&prefix.op, rhs)
@@ -103,6 +105,38 @@ fn eval_infix_integer(left: &Integer, right: &Integer, op: &str) -> Result<Objec
             value: left.value > right.value,
         })),
         _ => Err(format!("unsupported infix operator: {}", op)),
+    }
+}
+
+// if (condition) {..} else {..}
+fn eval_ifexpression(ep: &IfExpression) -> Result<Object, String> {
+    // condition
+    // - integer
+    // - boolean
+    // - null
+    let condition = eval_expression(&ep.condition)?;
+    // if(1 + 1) {
+    //  if (...) {
+    //   }
+    // }
+    if is_true(&condition) {
+        return eval_statements(&ep.if_block.statements);
+    } else {
+        if let Some(x) = ep.else_block.as_ref() {
+            return eval_statements(&x.statements);
+        } else {
+            Ok(Object::Null(Null {})) // 没有 else 块就返回 Null
+        }
+    }
+}
+
+fn is_true(obj: &Object) -> bool {
+    match obj {
+        Object::Boolean(x) => x.value,
+        Object::Integer(x) => return x.value != 0,
+        Object::Null(_x) => {
+            return false;
+        }
     }
 }
 
@@ -401,6 +435,96 @@ mod tests {
             );
             if let Ok(obj) = result {
                 assert_boolean_object(&obj, tc.expected);
+            }
+        }
+    }
+
+    #[test]
+    fn test_eval_ifelse() {
+        struct TestCase {
+            input: &'static str,
+            expected: Option<i64>, // None 表示应该返回 Null
+            has_error: bool,
+        }
+
+        let tests = vec![
+            // 条件为 true，执行 if 块
+            TestCase {
+                input: "if (true) { 10 }",
+                expected: Some(10),
+                has_error: false,
+            },
+            // 条件为 false，没有 else，返回 Null
+            TestCase {
+                input: "if (false) { 10 }",
+                expected: None,
+                has_error: false,
+            },
+            // 条件为 false，有 else
+            TestCase {
+                input: "if (false) { 10 } else { 20 }",
+                expected: Some(20),
+                has_error: false,
+            },
+            // 条件为 true，有 else，走 if 分支
+            TestCase {
+                input: "if (true) { 10 } else { 20 }",
+                expected: Some(10),
+                has_error: false,
+            },
+            // 条件是表达式
+            TestCase {
+                input: "if (1 < 2) { 10 }",
+                expected: Some(10),
+                has_error: false,
+            },
+            TestCase {
+                input: "if (1 > 2) { 10 }",
+                expected: None,
+                has_error: false,
+            },
+            TestCase {
+                input: "if (1 < 2) { 10 } else { 20 }",
+                expected: Some(10),
+                has_error: false,
+            },
+            TestCase {
+                input: "if (1 > 2) { 10 } else { 20 }",
+                expected: Some(20),
+                has_error: false,
+            },
+            // 整数作为条件：非 0 为 true
+            TestCase {
+                input: "if (1) { 10 }",
+                expected: Some(10),
+                has_error: false,
+            },
+            TestCase {
+                input: "if (0) { 10 } else { 20 }",
+                expected: Some(20),
+                has_error: false,
+            },
+        ];
+
+        for tc in &tests {
+            let result = string_to_ast(tc.input);
+            assert_eq!(
+                tc.has_error,
+                result.is_err(),
+                "input='{}', err={:?}",
+                tc.input,
+                result
+            );
+            if let Ok(obj) = result {
+                match tc.expected {
+                    Some(expected) => assert_integer_object(&obj, expected),
+                    None => assert!(
+                        matches!(obj, Object::Null(_)),
+                        "input='{}', expected Null, got: {:?}",
+                        tc.input,
+                        obj
+                    ),
+                }
             }
         }
     }

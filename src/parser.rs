@@ -272,6 +272,7 @@ impl<'a> Parser<'a> {
             TokenType::False => self.parse_boolean(),
             TokenType::True => self.parse_boolean(),
             TokenType::Lparen => self.parse_grouped_expression(),
+            TokenType::If => self.parse_ifelse_expression(),
             _ => {
                 let msg = format!(
                     "no prefix parse function for {:?} found",
@@ -388,6 +389,8 @@ impl<'a> Parser<'a> {
             } else {
                 return None;
             }
+
+            self.next_token();
         }
 
         Some(block)
@@ -429,7 +432,7 @@ impl<'a> Parser<'a> {
     // let f = fn(a, b) {return a + b}
     fn parse_function_literal(&mut self) -> Option<Expression> {
         let token = self.cur_token.clone();
-        if self.expect_peek(TokenType::Lparen) {
+        if !self.expect_peek(TokenType::Lparen) {
             return None;
         }
 

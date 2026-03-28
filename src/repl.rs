@@ -1,6 +1,6 @@
 use std::io::{self, BufRead, Write};
 
-use crate::{ast::Node, lexer::Lexer, parser::Parser};
+use crate::{environment::Environment, eval::eval, lexer::Lexer, object::Object, parser::Parser};
 
 const PROMPT: &str = ">>";
 
@@ -21,6 +21,7 @@ pub fn start<R: BufRead, W: Write>(mut input: R, mut output: W) -> io::Result<()
     writeln!(output, "{}", MONKEY_FACE)?;
 
     let mut line = String::new();
+    let mut env = Environment::new();
     loop {
         write!(output, "{}", PROMPT)?;
         output.flush()?;
@@ -39,8 +40,16 @@ pub fn start<R: BufRead, W: Write>(mut input: R, mut output: W) -> io::Result<()
             print_errors(&mut output, &p.errors)?;
             continue;
         }
-
-        writeln!(output, "{}", program.string())?;
+        match eval(&program, &mut env) {
+            Ok(obj) => {
+                if !matches!(obj, Object::Null(_)) {
+                    writeln!(output, "{}", obj.inspect())?;
+                }
+            }
+            Err(e) => {
+                writeln!(output, "eval error: {}", e)?;
+            }
+        }
     }
 }
 

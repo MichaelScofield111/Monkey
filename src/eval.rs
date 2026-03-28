@@ -1,16 +1,17 @@
 use crate::{
-    ast::{Expression, IfExpression, Program, Statement},
+    ast::{Expression, Identifier, IfExpression, Program, Statement},
+    environment::Environment,
     object::{Boolean, Integer, Null, Object, ReturnValue},
 };
 
-pub fn eval(ast: &Program) -> Result<Object, String> {
-    eval_statements(&ast.statements)
+pub fn eval(ast: &Program, env: &mut Environment) -> Result<Object, String> {
+    eval_statements(&ast.statements, env)
 }
 
-fn eval_statements(stmts: &Vec<Statement>) -> Result<Object, String> {
+fn eval_statements(stmts: &Vec<Statement>, env: &mut Environment) -> Result<Object, String> {
     let mut result = Object::Null(Null {});
     for stmt in stmts {
-        result = eval_statement(stmt)?;
+        result = eval_statement(stmt, env)?;
         // 顶层：解包 ReturnValue，拿出内部值后直接返回
         if let Object::ReturnValue(rv) = result {
             return Ok(*rv.value);
@@ -20,16 +21,23 @@ fn eval_statements(stmts: &Vec<Statement>) -> Result<Object, String> {
     Ok(result)
 }
 
-fn eval_statement(stmt: &Statement) -> Result<Object, String> {
+fn eval_statement(stmt: &Statement, env: &mut Environment) -> Result<Object, String> {
     match stmt {
         Statement::Expression(es) => match &es.expression {
-            Some(expr) => eval_expression(expr),
+            Some(expr) => eval_expression(expr, env),
             None => Ok(Object::Null(Null {})),
         },
-        Statement::Let(_) => Ok(Object::Null(Null {})),
-        Statement::Return(es) => match &es.value {
+        Statement::Let(ls) => {
+            let val = match &ls.value {
+                Some(expr) => eval_expression(expr, env)?,
+                None => return Err(format!("let statement missing value {}", ls.name.value)),
+            };
+            env.set(&ls.name.value, val);
+            Ok(Object::Null(Null {}))
+        }
+        Statement::Return(rs) => match &rs.value {
             Some(expr) => {
-                let val = eval_expression(expr)?;
+                let val = eval_expression(expr, env)?;
                 Ok(Object::ReturnValue(ReturnValue {
                     value: Box::new(val), // Box::new 包装
                 }))
@@ -38,24 +46,26 @@ fn eval_statement(stmt: &Statement) -> Result<Object, String> {
                 value: Box::new(Object::Null(Null {})),
             })),
         },
-        Statement::BlockStatement(bs) => eval_statements(&bs.statements),
+        Statement::BlockStatement(bs) => eval_statements(&bs.statements, env),
     }
 }
 
-fn eval_expression(expr: &Expression) -> Result<Object, String> {
+fn eval_expression(expr: &Expression, env: &mut Environment) -> Result<Object, String> {
     match expr {
         // integer
         Expression::IntegerLiteral(i) => Ok(Object::Integer(Integer { value: i.value })),
         Expression::Boolean(i) => Ok(Object::Boolean(Boolean { value: i.value })),
+        // parse to bind identifier
+        Expression::Identifier(i) => eval_indentifier(i, env),
         // parser if() {..} else {..}
-        Expression::IfExpression(i) => eval_ifexpression(i),
+        Expression::IfExpression(i) => eval_ifexpression(i, env),
         Expression::Prefix(prefix) => {
-            let rhs = eval_expression(&prefix.rhs)?;
+            let rhs = eval_expression(&prefix.rhs, env)?;
             eval_prefix_expression(&prefix.op, rhs)
         }
         Expression::Infix(infix) => {
-            let lhs = eval_expression(&infix.lhs)?;
-            let rhs = eval_expression(&infix.rhs)?;
+            let lhs = eval_expression(&infix.lhs, env)?;
+            let rhs = eval_expression(&infix.rhs, env)?;
             eval_infix_expression(&infix.op, lhs, rhs)
         }
         _ => Err(format!("unsupported expression type: {:?}", expr)),
@@ -124,21 +134,21 @@ fn eval_infix_integer(left: &Integer, right: &Integer, op: &str) -> Result<Objec
 }
 
 // if (condition) {..} else {..}
-fn eval_ifexpression(ep: &IfExpression) -> Result<Object, String> {
+fn eval_ifexpression(ep: &IfExpression, env: &mut Environment) -> Result<Object, String> {
     // condition
     // - integer
     // - boolean
     // - null
-    let condition = eval_expression(&ep.condition)?;
+    let condition = eval_expression(&ep.condition, env)?;
     // if(1 + 1) {
     //  if (...) {
     //   }
     // }
     if is_true(&condition) {
-        return eval_statements(&ep.if_block.statements);
+        return eval_statements(&ep.if_block.statements, env);
     } else {
         if let Some(x) = ep.else_block.as_ref() {
-            return eval_statements(&x.statements);
+            return eval_statements(&x.statements, env);
         } else {
             Ok(Object::Null(Null {})) // 没有 else 块就返回 Null
         }
@@ -168,6 +178,12 @@ fn eval_infix_boolean(l: &Boolean, r: &Boolean, op: &str) -> Result<Object, Stri
     }
 }
 
+fn eval_indentifier(ident: &Identifier, env: &Environment) -> Result<Object, String> {
+    env.get(&ident.value)
+        .cloned()
+        .ok_or_else(|| format!("undefined variable: {}", ident.value))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -184,7 +200,8 @@ mod tests {
             return Err(errors.join("; "));
         }
 
-        eval(&program)
+        let mut env = Environment::new();
+        eval(&program, &mut env)
     }
 
     fn assert_integer_object(obj: &Object, expected: i64) {
@@ -622,5 +639,41 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_let() -> Result<(), String> {
+        struct TestCase {
+            input: &'static str,
+            expected: Option<i64>,
+            has_error: bool,
+        }
+
+        let tests = vec![
+            TestCase {
+                input: "let a = 5; a",
+                expected: Some(5),
+                has_error: false,
+            },
+            TestCase {
+                input: "let a = 6; a;",
+                expected: Some(6),
+                has_error: false,
+            },
+            TestCase {
+                input: "let a = 5; let b = a; let c = (a + b) * 2; c",
+                expected: Some(20),
+                has_error: false,
+            },
+        ];
+
+        for tc in &tests {
+            let result = string_to_ast(tc.input)?;
+            match tc.expected {
+                Some(expected) => assert_integer_object(&result, expected),
+                None => {}
+            }
+        }
+        Ok(())
     }
 }

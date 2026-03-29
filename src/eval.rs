@@ -3,7 +3,7 @@ use crate::{
     environment::Environment,
     object::{Boolean, Function, Integer, Null, Object, ReturnValue},
 };
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, vec};
 
 pub fn eval(ast: &Program, env: &mut Environment) -> Result<Object, String> {
     eval_statements(&ast.statements, env)
@@ -13,7 +13,8 @@ fn eval_statements(stmts: &Vec<Statement>, env: &mut Environment) -> Result<Obje
     let mut result = Object::Null(Null {});
     for stmt in stmts {
         result = eval_statement(stmt, env)?;
-        // 顶层：解包 ReturnValue，拿出内部值后直接返回
+
+        // top level
         if let Object::ReturnValue(rv) = result {
             return Ok(*rv.value);
         }
@@ -47,7 +48,7 @@ fn eval_statement(stmt: &Statement, env: &mut Environment) -> Result<Object, Str
                 value: Box::new(Object::Null(Null {})),
             })),
         },
-        Statement::BlockStatement(bs) => eval_statements(&bs.statements, env),
+        Statement::BlockStatement(bs) => eval_block_statement(&bs.statements, env),
     }
 }
 
@@ -158,6 +159,18 @@ fn eval_infix_integer(left: &Integer, right: &Integer, op: &str) -> Result<Objec
     }
 }
 
+fn eval_block_statement(stmts: &Vec<Statement>, env: &mut Environment) -> Result<Object, String> {
+    let mut result = Object::Null(Null {});
+    for stmt in stmts {
+        result = eval_statement(stmt, env)?;
+        // block 内不要解包，原样向外冒泡
+        if let Object::ReturnValue(_) = result {
+            return Ok(result);
+        }
+    }
+    Ok(result)
+}
+
 // if (condition) {..} else {..}
 fn eval_ifexpression(ep: &IfExpression, env: &mut Environment) -> Result<Object, String> {
     // condition
@@ -170,9 +183,9 @@ fn eval_ifexpression(ep: &IfExpression, env: &mut Environment) -> Result<Object,
     //   }
     // }
     if is_true(&condition) {
-        eval_statements(&ep.if_block.statements, env)
+        eval_block_statement(&ep.if_block.statements, env)
     } else if let Some(x) = ep.else_block.as_ref() {
-        eval_statements(&x.statements, env)
+        eval_block_statement(&x.statements, env)
     } else {
         Ok(Object::Null(Null {})) // 没有 else 块就返回 Null
     }
@@ -235,7 +248,12 @@ fn call_function(f: Object, args: Vec<Object>) -> Result<Object, String> {
             for (param, arg) in fun.params.iter().zip(args.into_iter()) {
                 env.set(&param.value, arg);
             }
-            eval_statements(&fun.body.statements, &mut env)
+            let evaluated = eval_block_statement(&fun.body.statements, &mut env)?;
+            if let Object::ReturnValue(rv) = evaluated {
+                Ok(*rv.value)
+            } else {
+                Ok(evaluated)
+            }
         }
         _ => Err(format!("expected Function object, got: {:?}", f)),
     }
@@ -665,19 +683,19 @@ mod tests {
                 expected: Some(10),
                 has_error: false,
             },
-            // // TODO: 嵌套 if + return 的场景目前还不能稳定解析，先跳过并保留用例
-            // // ★ 核心 case：嵌套 if，内层 return 10 必须穿透外层块
-            // // 如果 ReturnValue 冒泡实现有误，会错误地执行 return 1 得到 1
-            // TestCase {
-            //     input: r#"if (10>1) {
-            //             if (10>1) {
-            //                 return 10;
-            //             }
-            //             return 1;
-            //         }"#,
-            //     expected: Some(10),
-            //     has_error: false,
-            // },
+            // TODO: 嵌套 if + return 的场景目前还不能稳定解析，先跳过并保留用例
+            // ★ 核心 case：嵌套 if，内层 return 10 必须穿透外层块
+            // 如果 ReturnValue 冒泡实现有误，会错误地执行 return 1 得到 1
+            TestCase {
+                input: r#"if (10>1) {
+                        if (10>1) {
+                            return 10;
+                        }
+                        return 1;
+                    }"#,
+                expected: Some(10),
+                has_error: false,
+            },
         ];
 
         for tc in &tests {

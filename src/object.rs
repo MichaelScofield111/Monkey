@@ -1,11 +1,17 @@
 use std::fmt;
 
+use crate::{
+    ast::{BlockStatement, Identifier, Node},
+    environment::Environment,
+};
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ObjectType {
     Integer,
     Boolean,
     Null,
     ReturnValue,
+    Function,
 }
 
 impl fmt::Display for ObjectType {
@@ -15,6 +21,7 @@ impl fmt::Display for ObjectType {
             ObjectType::Boolean => write!(f, "BOOLEAN"),
             ObjectType::Null => write!(f, "NULL"),
             ObjectType::ReturnValue => write!(f, "RETURN_VALUE"),
+            ObjectType::Function => write!(f, "FUNCTION"),
         }
     }
 }
@@ -25,6 +32,7 @@ pub enum Object {
     Boolean(Boolean),
     Null(Null),
     ReturnValue(ReturnValue),
+    Function(Function),
 }
 
 impl Object {
@@ -34,6 +42,7 @@ impl Object {
             Object::Boolean(b) => b.inspect(),
             Object::Null(n) => n.inspect(),
             Object::ReturnValue(r) => r.inspect(),
+            Object::Function(f) => f.inspect(),
         }
     }
     // ...
@@ -90,5 +99,29 @@ impl ReturnValue {
     }
     pub fn object_type(&self) -> ObjectType {
         ObjectType::ReturnValue // 返回自身类型，而不是内部值的类型
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Function {
+    pub params: Vec<Identifier>,
+    pub body: BlockStatement,
+    pub env: Environment,
+}
+
+impl Function {
+    pub fn inspect(&self) -> String {
+        format!(
+            "fn({}) {{ {} }}",
+            self.params
+                .iter()
+                .map(|p| p.value.clone())
+                .collect::<Vec<_>>()
+                .join(", "),
+            self.body.string()
+        )
+    }
+    pub fn object_type(&self) -> ObjectType {
+        ObjectType::Function
     }
 }

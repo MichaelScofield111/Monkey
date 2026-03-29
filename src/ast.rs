@@ -30,7 +30,7 @@ impl Node for Program {
 /// return x;
 /// x + 10 + 1;
 /// {....}
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Statement {
     Let(LetStatement),
     Return(ReturnStatement),
@@ -60,7 +60,7 @@ impl Node for Statement {
 
 // Expression
 // let x = 5  x: Indentifier,  5: Expression
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expression {
     Identifier(Identifier),
     IntegerLiteral(IntegerLiteral),
@@ -102,7 +102,7 @@ impl Node for Expression {
 
 // ── Identifier
 // let x = 5  x: Indentifier,  5: Expression
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Identifier {
     pub token: Token, // IDENT token
     pub value: String,
@@ -118,7 +118,7 @@ impl Node for Identifier {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IntegerLiteral {
     pub token: Token, // {INT, 5}
     pub value: i64,   // 5 -> 5
@@ -134,7 +134,7 @@ impl Node for IntegerLiteral {
 }
 
 // ── let <name> = <value>;
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LetStatement {
     pub token: Token, // LET token
     pub name: Identifier,
@@ -157,7 +157,7 @@ impl Node for LetStatement {
 }
 
 // ── return <value>;
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ReturnStatement {
     pub token: Token, // RETURN token
     /// `None` = 表达式部分暂时跳过
@@ -178,7 +178,7 @@ impl Node for ReturnStatement {
 }
 
 // ExpressionStatement
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ExpressionStatement {
     pub token: Token,
     pub expression: Option<Expression>,
@@ -196,7 +196,7 @@ impl Node for ExpressionStatement {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BlockStatement {
     pub token: Token,
     pub statements: Vec<Statement>,
@@ -215,7 +215,7 @@ impl Node for BlockStatement {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FunctionLiteral {
     pub token: Token,
     pub parameters: Vec<Expression>,
@@ -241,7 +241,7 @@ impl Node for FunctionLiteral {
 
 //  InfixExpression
 // 例如: 5 + 3,  x * y,  a == b
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct InfixExpression {
     pub token: Token,         // 运算符 token，比如 {Plus, "+"}
     pub lhs: Box<Expression>, // 左边
@@ -260,7 +260,7 @@ impl Node for InfixExpression {
 
 //  PrefixExpression
 // 例如: -5,  !true
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PrefixExpression {
     pub token: Token,         // 运算符 token，比如 {Minus, "-"}
     pub op: String,           // 运算符字符串: "-", "!"
@@ -276,7 +276,7 @@ impl Node for PrefixExpression {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BooleanExpression {
     pub token: Token,
     pub value: bool,
@@ -291,7 +291,7 @@ impl Node for BooleanExpression {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CallExpression {
     pub token: Token,
     pub arugument: Vec<Expression>,
@@ -316,7 +316,7 @@ impl Node for CallExpression {
 }
 
 /// if <condition> <expressionStatement> else <expressionStatement>
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IfExpression {
     pub token: Token,
     pub condition: Box<Expression>,

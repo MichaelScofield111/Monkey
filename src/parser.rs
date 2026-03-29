@@ -273,6 +273,7 @@ impl<'a> Parser<'a> {
             TokenType::True => self.parse_boolean(),
             TokenType::Lparen => self.parse_grouped_expression(),
             TokenType::If => self.parse_ifelse_expression(),
+            TokenType::Function => self.parse_function_literal(),
             _ => {
                 let msg = format!(
                     "no prefix parse function for {:?} found",
@@ -400,7 +401,7 @@ impl<'a> Parser<'a> {
         if self.peek_token_is(&TokenType::Rparen) {
             // no parameters
             self.next_token();
-            return None;
+            return Some(Vec::new());
         }
 
         // to get parameters
@@ -436,22 +437,17 @@ impl<'a> Parser<'a> {
             return None;
         }
 
-        let parameters = self.parse_function_parameters();
+        let parameters = self.parse_function_parameters()?;
         if !self.expect_peek(TokenType::Lbrace) {
             return None;
         }
 
-        let body = self.parse_block_statement();
-
-        //TODO remove
-        if !self.current_token_is(&TokenType::Rbrace) {
-            panic!("the {{ is no close");
-        }
+        let body = self.parse_block_statement()?;
 
         Some(Expression::FunctionLiteral(FunctionLiteral {
             token,
-            parameters: parameters.unwrap(),
-            body: Box::new(body.unwrap()),
+            parameters,
+            body: Box::new(body),
         }))
     }
 
@@ -726,6 +722,52 @@ mod tests {
                 },
                 other => panic!("expected ExpressionStatement, got {:?}", other),
             }
+        }
+    }
+
+    #[test]
+    fn test_function_literal_expression() {
+        let input = "fn(x, y) { x + y; }";
+        let l = Lexer::new(input);
+        let mut p = Parser::new(l);
+        let program = p.parse_program();
+        check_parser_errors(&p);
+
+        assert_eq!(program.statements.len(), 1);
+        match &program.statements[0] {
+            Statement::Expression(es) => match &es.expression {
+                Some(Expression::FunctionLiteral(func)) => {
+                    assert_eq!(func.parameters.len(), 2);
+                    assert_eq!(func.parameters[0].string(), "x");
+                    assert_eq!(func.parameters[1].string(), "y");
+                    assert_eq!(func.body.statements.len(), 1);
+                    assert_eq!(func.body.string(), "(x + y)");
+                }
+                other => panic!("expected FunctionLiteral, got {:?} for input: {}", other, input),
+            },
+            other => panic!("expected ExpressionStatement, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_function_literal_zero_params_expression() {
+        let input = "fn() { 1; }";
+        let l = Lexer::new(input);
+        let mut p = Parser::new(l);
+        let program = p.parse_program();
+        check_parser_errors(&p);
+
+        assert_eq!(program.statements.len(), 1);
+        match &program.statements[0] {
+            Statement::Expression(es) => match &es.expression {
+                Some(Expression::FunctionLiteral(func)) => {
+                    assert_eq!(func.parameters.len(), 0);
+                    assert_eq!(func.body.statements.len(), 1);
+                    assert_eq!(func.body.string(), "1");
+                }
+                other => panic!("expected FunctionLiteral, got {:?} for input: {}", other, input),
+            },
+            other => panic!("expected ExpressionStatement, got {:?}", other),
         }
     }
 

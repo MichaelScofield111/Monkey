@@ -1,8 +1,9 @@
 use crate::{
     ast::{Expression, Identifier, IfExpression, Program, Statement},
     environment::Environment,
-    object::{Boolean, Integer, Null, Object, ReturnValue},
+    object::{Boolean, Function, Integer, Null, Object, ReturnValue},
 };
+use std::{cell::RefCell, rc::Rc};
 
 pub fn eval(ast: &Program, env: &mut Environment) -> Result<Object, String> {
     eval_statements(&ast.statements, env)
@@ -56,9 +57,29 @@ fn eval_expression(expr: &Expression, env: &mut Environment) -> Result<Object, S
         Expression::IntegerLiteral(i) => Ok(Object::Integer(Integer { value: i.value })),
         Expression::Boolean(i) => Ok(Object::Boolean(Boolean { value: i.value })),
         // parse to bind identifier
-        Expression::Identifier(i) => eval_indentifier(i, env),
+        Expression::Identifier(i) => eval_identifier(i, env),
         // parser if() {..} else {..}
         Expression::IfExpression(i) => eval_ifexpression(i, env),
+        Expression::FunctionLiteral(fl) => {
+            let mut params = Vec::with_capacity(fl.parameters.len());
+            for param in &fl.parameters {
+                match param {
+                    Expression::Identifier(ident) => params.push(ident.clone()),
+                    other => {
+                        return Err(format!(
+                            "function parameter must be identifier, got: {:?}",
+                            other
+                        ));
+                    }
+                }
+            }
+
+            Ok(Object::Function(Function {
+                params,
+                body: fl.body.as_ref().clone(),
+                env: env.clone(),
+            }))
+        }
         Expression::Prefix(prefix) => {
             let rhs = eval_expression(&prefix.rhs, env)?;
             eval_prefix_expression(&prefix.op, rhs)
@@ -68,7 +89,11 @@ fn eval_expression(expr: &Expression, env: &mut Environment) -> Result<Object, S
             let rhs = eval_expression(&infix.rhs, env)?;
             eval_infix_expression(&infix.op, lhs, rhs)
         }
-        _ => Err(format!("unsupported expression type: {:?}", expr)),
+        Expression::CallExpression(ce) => {
+            let f = eval_expression(&ce.function, env)?;
+            let args = eval_arguments(&ce.arugument, env)?;
+            call_function(f, args)
+        }
     }
 }
 
@@ -145,23 +170,19 @@ fn eval_ifexpression(ep: &IfExpression, env: &mut Environment) -> Result<Object,
     //   }
     // }
     if is_true(&condition) {
-        return eval_statements(&ep.if_block.statements, env);
+        eval_statements(&ep.if_block.statements, env)
+    } else if let Some(x) = ep.else_block.as_ref() {
+        eval_statements(&x.statements, env)
     } else {
-        if let Some(x) = ep.else_block.as_ref() {
-            return eval_statements(&x.statements, env);
-        } else {
-            Ok(Object::Null(Null {})) // 没有 else 块就返回 Null
-        }
+        Ok(Object::Null(Null {})) // 没有 else 块就返回 Null
     }
 }
 
 fn is_true(obj: &Object) -> bool {
     match obj {
         Object::Boolean(x) => x.value,
-        Object::Integer(x) => return x.value != 0,
-        Object::Null(_x) => {
-            return false;
-        }
+        Object::Integer(x) => x.value != 0,
+        Object::Null(_x) => false,
         _ => false,
     }
 }
@@ -178,10 +199,46 @@ fn eval_infix_boolean(l: &Boolean, r: &Boolean, op: &str) -> Result<Object, Stri
     }
 }
 
-fn eval_indentifier(ident: &Identifier, env: &Environment) -> Result<Object, String> {
+fn eval_identifier(ident: &Identifier, env: &Environment) -> Result<Object, String> {
     env.get(&ident.value)
-        .cloned()
-        .ok_or_else(|| format!("undefined variable: {}", ident.value))
+        .ok_or_else(|| format!("identifier not found: {}", ident.value))
+}
+
+fn eval_arguments(args: &Vec<Expression>, env: &mut Environment) -> Result<Vec<Object>, String> {
+    let mut evaluated = Vec::new();
+    for arg in args {
+        let obj = eval_expression(arg, env)?;
+        evaluated.push(obj);
+    }
+    Ok(evaluated)
+}
+
+/*
+    fn(x, y) {
+
+    }
+    (1, 2) -> args
+*/
+fn call_function(f: Object, args: Vec<Object>) -> Result<Object, String> {
+    match f {
+        Object::Function(fun) => {
+            if args.len() != fun.params.len() {
+                return Err(format!(
+                    "wrong number of arguments: expected {}, got {}",
+                    fun.params.len(),
+                    args.len()
+                ));
+            }
+
+            let parent = Rc::new(RefCell::new(fun.env));
+            let mut env = Environment::new_enclosed(parent);
+            for (param, arg) in fun.params.iter().zip(args.into_iter()) {
+                env.set(&param.value, arg);
+            }
+            eval_statements(&fun.body.statements, &mut env)
+        }
+        _ => Err(format!("expected Function object, got: {:?}", f)),
+    }
 }
 
 #[cfg(test)]
@@ -675,5 +732,57 @@ mod tests {
             }
         }
         Ok(())
+    }
+
+    #[test]
+    fn test_function_call() {
+        struct TestCase {
+            input: &'static str,
+            expected: i64,
+        }
+
+        let tests = vec![
+            TestCase {
+                input: "let identity = fn(x) { x; }; identity(5);",
+                expected: 5,
+            },
+            TestCase {
+                input: "let add = fn(a, b) { a + b; }; add(2, 3);",
+                expected: 5,
+            },
+            TestCase {
+                input: "fn() { 42; }();",
+                expected: 42,
+            },
+            TestCase {
+                input: "let x = 10; let f = fn(y) { x + y; }; f(5);",
+                expected: 15,
+            },
+        ];
+
+        for tc in &tests {
+            let result = string_to_ast(tc.input).expect(tc.input);
+            assert_integer_object(&result, tc.expected);
+        }
+    }
+
+    #[test]
+    fn test_function_call_wrong_arity() {
+        let tests = vec![
+            "let add = fn(a, b) { a + b; }; add(1);",
+            "let add = fn(a, b) { a + b; }; add(1, 2, 3);",
+        ];
+
+        for input in &tests {
+            let result = string_to_ast(input);
+            assert!(result.is_err(), "expected arity error for input: {}", input);
+            let err = result.unwrap_err();
+            assert!(
+                err.contains("wrong number of arguments"),
+                "unexpected error for input='{}': {}",
+                input,
+                err
+            );
+        }
     }
 }

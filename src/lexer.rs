@@ -24,6 +24,22 @@ impl<'a> Lexer<'a> {
         lexer
     }
 
+    pub fn read_string(&mut self) -> String {
+        // now current position is ' " '
+
+        // next char position
+        let pos = self.position + 1;
+        loop {
+            self.read_char();
+            if self.ch == b'"' || self.ch == 0 {
+                break;
+            }
+        }
+        std::str::from_utf8(&self.input[pos..self.position])
+            .unwrap()
+            .to_string()
+    }
+
     pub fn read_identifier(&mut self) -> String {
         let position = self.position;
         while Self::is_letter(self.ch) {
@@ -67,6 +83,14 @@ impl<'a> Lexer<'a> {
         self.skip_whitespaces();
 
         let tok = match self.ch {
+            b'"' => {
+                let token_type = TokenType::String;
+                let literal = self.read_string();
+                Token {
+                    r#type: token_type,
+                    literal,
+                }
+            }
             b'=' => {
                 if self.peek_char() == b'=' {
                     // 10 == 10

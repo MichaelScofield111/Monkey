@@ -13,6 +13,7 @@ pub enum TokenType {
 
     Ident,
     Int,
+    String,
 
     Assign,
     Plus,
@@ -127,6 +128,8 @@ mod tests {
 
                10 == 10;
                10 != 9;
+               "foobar"
+               "foo bar"
                "#;
 
         let tests = vec![
@@ -202,6 +205,8 @@ mod tests {
             (TokenType::Noteq, "!="),
             (TokenType::Int, "9"),
             (TokenType::Semicolon, ";"),
+            (TokenType::String, "foobar"),
+            (TokenType::String, "foo bar"),
             (TokenType::Eof, ""),
         ];
 

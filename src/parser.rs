@@ -2,7 +2,7 @@ use crate::{
     ast::{
         BlockStatement, BooleanExpression, CallExpression, Expression, ExpressionStatement,
         FunctionLiteral, Identifier, IfExpression, InfixExpression, IntegerLiteral, LetStatement,
-        PrefixExpression, Program, ReturnStatement, Statement,
+        PrefixExpression, Program, ReturnStatement, Statement, StringLiteral,
     },
     lexer::Lexer,
     token::{Token, TokenType},
@@ -274,6 +274,7 @@ impl<'a> Parser<'a> {
             TokenType::Lparen => self.parse_grouped_expression(),
             TokenType::If => self.parse_ifelse_expression(),
             TokenType::Function => self.parse_function_literal(),
+            TokenType::String => self.parse_string_literal(),
             _ => {
                 let msg = format!(
                     "no prefix parse function for {:?} found",
@@ -448,6 +449,14 @@ impl<'a> Parser<'a> {
             token,
             parameters,
             body: Box::new(body),
+        }))
+    }
+
+    fn parse_string_literal(&mut self) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        Some(Expression::StringLiteral(StringLiteral {
+            token: token,
+            value: self.cur_token.literal.clone(),
         }))
     }
 
@@ -743,7 +752,10 @@ mod tests {
                     assert_eq!(func.body.statements.len(), 1);
                     assert_eq!(func.body.string(), "(x + y)");
                 }
-                other => panic!("expected FunctionLiteral, got {:?} for input: {}", other, input),
+                other => panic!(
+                    "expected FunctionLiteral, got {:?} for input: {}",
+                    other, input
+                ),
             },
             other => panic!("expected ExpressionStatement, got {:?}", other),
         }
@@ -765,7 +777,10 @@ mod tests {
                     assert_eq!(func.body.statements.len(), 1);
                     assert_eq!(func.body.string(), "1");
                 }
-                other => panic!("expected FunctionLiteral, got {:?} for input: {}", other, input),
+                other => panic!(
+                    "expected FunctionLiteral, got {:?} for input: {}",
+                    other, input
+                ),
             },
             other => panic!("expected ExpressionStatement, got {:?}", other),
         }
@@ -803,6 +818,31 @@ mod tests {
                     }
                     other => panic!(
                         "expected CallExpression, got {:?} for input: {}",
+                        other, input
+                    ),
+                },
+                other => panic!("expected ExpressionStatement, got {:?}", other),
+            }
+        }
+    }
+
+    #[test]
+    fn test_string_literal() {
+        let tests = vec![("\"hello world!\"", "hello world!".to_string())];
+
+        for (input, expected) in tests {
+            let l = Lexer::new(input);
+            let mut p = Parser::new(l);
+            let program = p.parse_program();
+            check_parser_errors(&p);
+
+            match &program.statements[0] {
+                Statement::Expression(es) => match &es.expression {
+                    Some(Expression::StringLiteral(str)) => {
+                        assert_eq!(str.string(), expected, "input: {}", input);
+                    }
+                    other => panic!(
+                        "expected string literal, got {:?} for input: {}",
                         other, input
                     ),
                 },

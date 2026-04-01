@@ -12,6 +12,7 @@ pub enum ObjectType {
     Null,
     ReturnValue,
     Function,
+    MonString,
 }
 
 impl fmt::Display for ObjectType {
@@ -22,6 +23,7 @@ impl fmt::Display for ObjectType {
             ObjectType::Null => write!(f, "NULL"),
             ObjectType::ReturnValue => write!(f, "RETURN_VALUE"),
             ObjectType::Function => write!(f, "FUNCTION"),
+            ObjectType::MonString => write!(f, "STRING"),
         }
     }
 }
@@ -33,6 +35,7 @@ pub enum Object {
     Null(Null),
     ReturnValue(ReturnValue),
     Function(Function),
+    MonString(MonString),
 }
 
 impl Object {
@@ -43,6 +46,7 @@ impl Object {
             Object::Null(n) => n.inspect(),
             Object::ReturnValue(r) => r.inspect(),
             Object::Function(f) => f.inspect(),
+            Object::MonString(f) => f.inspect(),
         }
     }
     // ...
@@ -123,5 +127,19 @@ impl Function {
     }
     pub fn object_type(&self) -> ObjectType {
         ObjectType::Function
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MonString {
+    pub value: String,
+}
+
+impl MonString {
+    pub fn inspect(&self) -> String {
+        format!("\"{}\"", self.value)
+    }
+    pub fn object_type(&self) -> ObjectType {
+        ObjectType::MonString
     }
 }

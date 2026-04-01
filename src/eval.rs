@@ -1,9 +1,9 @@
 use crate::{
     ast::{Expression, Identifier, IfExpression, Program, Statement},
     environment::Environment,
-    object::{Boolean, Function, Integer, Null, Object, ReturnValue},
+    object::{Boolean, Function, Integer, MonString, Null, Object, ReturnValue},
 };
-use std::{cell::RefCell, rc::Rc, vec};
+use std::{cell::RefCell, rc::Rc};
 
 pub fn eval(ast: &Program, env: &mut Environment) -> Result<Object, String> {
     eval_statements(&ast.statements, env)
@@ -95,6 +95,10 @@ fn eval_expression(expr: &Expression, env: &mut Environment) -> Result<Object, S
             let args = eval_arguments(&ce.arugument, env)?;
             call_function(f, args)
         }
+        Expression::StringLiteral(se) => Ok(Object::MonString(MonString {
+            value: se.value.clone(),
+        })),
+        _ => Err(format!("no support eval expression")),
     }
 }
 
@@ -121,6 +125,7 @@ fn eval_infix_expression(op: &str, lhs: Object, rhs: Object) -> Result<Object, S
     match (&lhs, &rhs) {
         (Object::Integer(l), Object::Integer(r)) => eval_infix_integer(l, r, op),
         (Object::Boolean(l), Object::Boolean(r)) => eval_infix_boolean(l, r, op),
+        (Object::MonString(_), Object::MonString(_)) => eval_infix_string(lhs, op, rhs),
         _ => Err(format!(
             "expected integer operands for infix operator: {}",
             op
@@ -224,6 +229,21 @@ fn eval_arguments(args: &Vec<Expression>, env: &mut Environment) -> Result<Vec<O
         evaluated.push(obj);
     }
     Ok(evaluated)
+}
+
+fn eval_infix_string(l: Object, op: &str, r: Object) -> Result<Object, String> {
+    match (l, op, r) {
+        (Object::MonString(l), "==", Object::MonString(r)) => Ok(Object::Boolean(Boolean {
+            value: l.value == r.value,
+        })),
+        (Object::MonString(l), "!=", Object::MonString(r)) => Ok(Object::Boolean(Boolean {
+            value: l.value != r.value,
+        })),
+        (Object::MonString(l), "+", Object::MonString(r)) => Ok(Object::MonString(MonString {
+            value: l.value + &r.value,
+        })),
+        _ => Err("unsupported infix operator for strings".to_string()),
+    }
 }
 
 /*
@@ -801,6 +821,103 @@ mod tests {
                 input,
                 err
             );
+        }
+    }
+
+    #[test]
+    fn test_string_concat() {
+        struct TestCase {
+            input: &'static str,
+            expected_string: Option<&'static str>,
+            expected_bool: Option<bool>,
+            expected_err_contains: Option<&'static str>,
+        }
+
+        let tests = vec![
+            TestCase {
+                input: "\"hello \"+\"world\"",
+                expected_string: Some("hello world"),
+                expected_bool: None,
+                expected_err_contains: None,
+            },
+            TestCase {
+                input: "\"hello \"-\"world\"",
+                expected_string: None,
+                expected_bool: None,
+                expected_err_contains: Some("unsupported infix operator for strings"),
+            },
+            TestCase {
+                input: "\"hello\" == \"world\"",
+                expected_string: None,
+                expected_bool: Some(false),
+                expected_err_contains: None,
+            },
+            TestCase {
+                input: "\"hello\" == \"hello\"",
+                expected_string: None,
+                expected_bool: Some(true),
+                expected_err_contains: None,
+            },
+        ];
+
+        for tc in &tests {
+            let got = string_to_ast(tc.input);
+
+            if let Some(expected_err) = tc.expected_err_contains {
+                assert!(got.is_err(), "expected error for input: {}", tc.input);
+                let err = got.unwrap_err();
+                assert!(
+                    err.contains(expected_err),
+                    "input: {}, expected err contains: {}, actual: {}",
+                    tc.input,
+                    expected_err,
+                    err
+                );
+                continue;
+            }
+
+            let got = got.expect(tc.input);
+            if let Some(expected) = tc.expected_string {
+                match got {
+                    Object::MonString(s) => assert_eq!(s.value, expected, "input: {}", tc.input),
+                    other => panic!("input: {}, expected string, got {:?}", tc.input, other),
+                }
+                continue;
+            }
+
+            if let Some(expected) = tc.expected_bool {
+                match got {
+                    Object::Boolean(b) => assert_eq!(b.value, expected, "input: {}", tc.input),
+                    other => panic!("input: {}, expected bool, got {:?}", tc.input, other),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_string_literal() {
+        struct TestCase {
+            input: &'static str,
+            expected: &'static str,
+        }
+
+        let tests = vec![
+            TestCase {
+                input: "\"hello world\"",
+                expected: "hello world",
+            },
+            TestCase {
+                input: "\"hello world",
+                expected: "hello world",
+            },
+        ];
+
+        for tc in &tests {
+            let got = string_to_ast(tc.input).expect(tc.input);
+            match got {
+                Object::MonString(s) => assert_eq!(s.value, tc.expected, "input: {}", tc.input),
+                other => panic!("input: {}, expected string, got {:?}", tc.input, other),
+            }
         }
     }
 }

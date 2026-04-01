@@ -64,6 +64,7 @@ impl Node for Statement {
 pub enum Expression {
     Identifier(Identifier),
     IntegerLiteral(IntegerLiteral),
+    StringLiteral(StringLiteral),
     Infix(InfixExpression),
     Prefix(PrefixExpression),
     Boolean(BooleanExpression),
@@ -77,6 +78,7 @@ impl Node for Expression {
         match self {
             Expression::Identifier(i) => i.token_literal(),
             Expression::IntegerLiteral(i) => i.token_literal(),
+            Expression::StringLiteral(i) => i.token_literal(),
             Expression::Infix(i) => i.token_literal(),
             Expression::Prefix(i) => i.token_literal(),
             Expression::Boolean(i) => i.token_literal(),
@@ -90,6 +92,7 @@ impl Node for Expression {
         match self {
             Expression::Identifier(i) => i.string(),
             Expression::IntegerLiteral(i) => i.string(),
+            Expression::StringLiteral(i) => i.string(),
             Expression::Infix(i) => i.string(),
             Expression::Prefix(i) => i.string(),
             Expression::Boolean(i) => i.string(),
@@ -130,6 +133,21 @@ impl Node for IntegerLiteral {
 
     fn string(&self) -> String {
         self.value.to_string()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StringLiteral {
+    pub token: Token,
+    pub value: String,
+}
+impl Node for StringLiteral {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+
+    fn string(&self) -> String {
+        self.value.clone()
     }
 }
 

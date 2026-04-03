@@ -13,6 +13,7 @@ pub enum ObjectType {
     ReturnValue,
     Function,
     MonString,
+    Builtin,
 }
 
 impl fmt::Display for ObjectType {
@@ -24,6 +25,7 @@ impl fmt::Display for ObjectType {
             ObjectType::ReturnValue => write!(f, "RETURN_VALUE"),
             ObjectType::Function => write!(f, "FUNCTION"),
             ObjectType::MonString => write!(f, "STRING"),
+            ObjectType::Builtin => write!(f, "BUILTIN"),
         }
     }
 }
@@ -36,6 +38,7 @@ pub enum Object {
     ReturnValue(ReturnValue),
     Function(Function),
     MonString(MonString),
+    Builtin(Builtin),
 }
 
 impl Object {
@@ -47,6 +50,7 @@ impl Object {
             Object::ReturnValue(r) => r.inspect(),
             Object::Function(f) => f.inspect(),
             Object::MonString(f) => f.inspect(),
+            Object::Builtin(f) => f.inspect(),
         }
     }
     // ...
@@ -141,5 +145,33 @@ impl MonString {
     }
     pub fn object_type(&self) -> ObjectType {
         ObjectType::MonString
+    }
+}
+
+pub type BuiltinFunction = fn(args: Vec<Object>) -> Result<Object, String>;
+
+#[derive(Debug, Clone)]
+pub struct Builtin {
+    name: String,
+    fun: BuiltinFunction,
+}
+
+impl Builtin {
+    pub fn new(name: &str, fun: BuiltinFunction) -> Self {
+        Self {
+            name: name.to_string(),
+            fun,
+        }
+    }
+
+    pub fn call(&self, args: Vec<Object>) -> Result<Object, String> {
+        (self.fun)(args)
+    }
+    pub fn inspect(&self) -> String {
+        format!("{} is a builtin\n", self.name)
+    }
+
+    pub fn object_type(&self) -> ObjectType {
+        ObjectType::Builtin
     }
 }

@@ -1,5 +1,6 @@
 use crate::{
     ast::{Expression, Identifier, IfExpression, Program, Statement},
+    builtin::get_builtin,
     environment::Environment,
     object::{Boolean, Function, Integer, MonString, Null, Object, ReturnValue},
 };
@@ -218,8 +219,15 @@ fn eval_infix_boolean(l: &Boolean, r: &Boolean, op: &str) -> Result<Object, Stri
 }
 
 fn eval_identifier(ident: &Identifier, env: &Environment) -> Result<Object, String> {
-    env.get(&ident.value)
-        .ok_or_else(|| format!("identifier not found: {}", ident.value))
+    if let Some(obj) = env.get(&ident.value) {
+        return Ok(obj);
+    }
+
+    if let Some(builtin) = get_builtin(&ident.value) {
+        return Ok(builtin);
+    }
+
+    Err(format!("identifier not found: {}", ident.value))
 }
 
 fn eval_arguments(args: &Vec<Expression>, env: &mut Environment) -> Result<Vec<Object>, String> {
@@ -275,6 +283,7 @@ fn call_function(f: Object, args: Vec<Object>) -> Result<Object, String> {
                 Ok(evaluated)
             }
         }
+        Object::Builtin(b) => b.call(args),
         _ => Err(format!("expected Function object, got: {:?}", f)),
     }
 }
@@ -917,6 +926,68 @@ mod tests {
             match got {
                 Object::MonString(s) => assert_eq!(s.value, tc.expected, "input: {}", tc.input),
                 other => panic!("input: {}, expected string, got {:?}", tc.input, other),
+            }
+        }
+    }
+
+    #[test]
+    fn test_builtin_len() {
+        struct TestCase {
+            input: &'static str,
+            expected_int: Option<i64>,
+            expected_err_contains: Option<&'static str>,
+        }
+
+        let tests = vec![
+            TestCase {
+                input: r#"len("hello")"#,
+                expected_int: Some(5),
+                expected_err_contains: None,
+            },
+            TestCase {
+                input: r#"len("")"#,
+                expected_int: Some(0),
+                expected_err_contains: None,
+            },
+            TestCase {
+                input: r#"len("hello", "world")"#,
+                expected_int: None,
+                expected_err_contains: Some("wrong number of arguments"),
+            },
+            TestCase {
+                input: "len(1)",
+                expected_int: None,
+                expected_err_contains: Some("not supported on INTEGER"),
+            },
+            TestCase {
+                input: "len(true)",
+                expected_int: None,
+                expected_err_contains: Some("not supported on BOOLEAN"),
+            },
+        ];
+
+        for tc in tests {
+            let got = string_to_ast(tc.input);
+
+            if let Some(expected_err) = tc.expected_err_contains {
+                assert!(got.is_err(), "expected error for input: {}", tc.input);
+                let err = got.unwrap_err();
+                assert!(
+                    err.contains(expected_err),
+                    "input: {}, expected err contains: {}, got: {}",
+                    tc.input,
+                    expected_err,
+                    err
+                );
+                continue;
+            }
+
+            let got = got.expect(tc.input);
+            match got {
+                Object::Integer(i) => {
+                    assert_eq!(Some(i.value), tc.expected_int, "input: {}", tc.input)
+                }
+                other => panic!("input: {}, expected Integer, got {:?}", tc.input, other),
             }
         }
     }

@@ -29,6 +29,8 @@ pub enum TokenType {
     Rparen,
     Lbrace,
     Rbrace,
+    LBracket,
+    RBracket,
 
     Let,
     Function,
@@ -130,6 +132,8 @@ mod tests {
                10 != 9;
                "foobar"
                "foo bar"
+               [
+               ]
                "#;
 
         let tests = vec![
@@ -207,6 +211,8 @@ mod tests {
             (TokenType::Semicolon, ";"),
             (TokenType::String, "foobar"),
             (TokenType::String, "foo bar"),
+            (TokenType::LBracket, "["),
+            (TokenType::RBracket, "]"),
             (TokenType::Eof, ""),
         ];
 

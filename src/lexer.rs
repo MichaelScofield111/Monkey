@@ -141,6 +141,14 @@ impl<'a> Lexer<'a> {
                 r#type: TokenType::Rbrace,
                 literal: (self.ch as char).to_string(),
             },
+            b'[' => Token {
+                r#type: TokenType::LBracket,
+                literal: (self.ch as char).to_string(),
+            },
+            b']' => Token {
+                r#type: TokenType::RBracket,
+                literal: (self.ch as char).to_string(),
+            },
             b',' => Token {
                 r#type: TokenType::Comma,
                 literal: (self.ch as char).to_string(),

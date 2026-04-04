@@ -1,8 +1,9 @@
 use crate::{
     ast::{
-        BlockStatement, BooleanExpression, CallExpression, Expression, ExpressionStatement,
-        FunctionLiteral, Identifier, IfExpression, InfixExpression, IntegerLiteral, LetStatement,
-        PrefixExpression, Program, ReturnStatement, Statement, StringLiteral,
+        ArrayLiteral, BlockStatement, BooleanExpression, CallExpression, Expression,
+        ExpressionStatement, FunctionLiteral, Identifier, IfExpression, InfixExpression,
+        IntegerLiteral, LetStatement, PrefixExpression, Program, ReturnStatement, Statement,
+        StringLiteral,
     },
     lexer::Lexer,
     token::{Token, TokenType},
@@ -103,7 +104,6 @@ impl<'a> Parser<'a> {
             if let Some(stmt) = stmt {
                 program.statements.push(stmt);
             }
-
             self.next_token();
         }
 
@@ -275,6 +275,7 @@ impl<'a> Parser<'a> {
             TokenType::If => self.parse_ifelse_expression(),
             TokenType::Function => self.parse_function_literal(),
             TokenType::String => self.parse_string_literal(),
+            TokenType::LBracket => self.parse_array_literal(),
             _ => {
                 let msg = format!(
                     "no prefix parse function for {:?} found",
@@ -483,7 +484,7 @@ impl<'a> Parser<'a> {
     // parseFunctionCall is a special case for parseInfixExpression
     fn parse_function_call(&mut self, function: Expression) -> Option<Expression> {
         let token = self.cur_token.clone();
-        let args = self.parse_call_arguments().unwrap_or_default();
+        let args = self.parse_expression_list(TokenType::Rparen);
         Some(Expression::CallExpression(CallExpression {
             token,
             arugument: args,
@@ -491,12 +492,20 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_call_arguments(&mut self) -> Option<Vec<Expression>> {
+    fn parse_array_literal(&mut self) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        Some(Expression::ArrayLiteral(ArrayLiteral {
+            token,
+            elements: self.parse_expression_list(TokenType::RBracket),
+        }))
+    }
+
+    fn parse_expression_list(&mut self, end: TokenType) -> Vec<Expression> {
         // add(1, add(1+2), 3)
-        if self.peek_token_is(&TokenType::Rparen) {
+        if self.peek_token_is(&end) {
             // no params
             self.next_token();
-            return None;
+            return vec![];
         }
 
         // "("
@@ -515,11 +524,11 @@ impl<'a> Parser<'a> {
             }
         }
 
-        if !self.expect_peek(TokenType::Rparen) {
-            return None;
+        if !self.expect_peek(end) {
+            return vec![];
         }
 
-        Some(args)
+        args
     }
 }
 
@@ -847,6 +856,62 @@ mod tests {
                     ),
                 },
                 other => panic!("expected ExpressionStatement, got {:?}", other),
+            }
+        }
+    }
+
+    #[test]
+    fn test_array_literal() {
+        let tests = vec![("[1,3*3]", vec![1, 2])];
+
+        for (input, _expected_values) in tests {
+            let l = Lexer::new(input);
+            let mut p = Parser::new(l);
+            let program = p.parse_program();
+            check_parser_errors(&p);
+
+            assert_eq!(program.statements.len(), 1, "input: {}", input);
+
+            let stmt = match &program.statements[0] {
+                Statement::Expression(es) => es,
+                other => panic!(
+                    "expected ExpressionStatement, got {:?}, input: {}",
+                    other, input
+                ),
+            };
+
+            let arr = match &stmt.expression {
+                Some(Expression::ArrayLiteral(a)) => a,
+                other => panic!("expected ArrayLiteral, got {:?}, input: {}", other, input),
+            };
+
+            assert_eq!(arr.elements.len(), 2, "input: {}", input);
+
+            match &arr.elements[0] {
+                Expression::IntegerLiteral(i) => assert_eq!(i.value, 1, "input: {}", input),
+                other => panic!(
+                    "expected first element int literal, got {:?}, input: {}",
+                    other, input
+                ),
+            }
+
+            match &arr.elements[1] {
+                Expression::Infix(inf) => {
+                    assert_eq!(inf.op, "*", "input: {}", input);
+
+                    match &*inf.lhs {
+                        Expression::IntegerLiteral(i) => assert_eq!(i.value, 3, "input: {}", input),
+                        other => panic!("expected lhs int 2, got {:?}, input: {}", other, input),
+                    }
+                    match &*inf.rhs {
+                        Expression::IntegerLiteral(i) => assert_eq!(i.value, 3, "input: {}", input),
+                        other => panic!("expected rhs int 3, got {:?}, input: {}", other, input),
+                    }
+                }
+                other => panic!(
+                    "expected second element infix expression, got {:?}, input: {}",
+                    other, input
+                ),
             }
         }
     }

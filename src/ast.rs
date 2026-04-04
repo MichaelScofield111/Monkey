@@ -71,6 +71,7 @@ pub enum Expression {
     IfExpression(IfExpression),
     FunctionLiteral(FunctionLiteral),
     CallExpression(CallExpression),
+    ArrayLiteral(ArrayLiteral),
 }
 
 impl Node for Expression {
@@ -85,6 +86,7 @@ impl Node for Expression {
             Expression::IfExpression(i) => i.token_literal(),
             Expression::FunctionLiteral(i) => i.token_literal(),
             Expression::CallExpression(i) => i.token_literal(),
+            Expression::ArrayLiteral(i) => i.token_literal(),
         }
     }
 
@@ -99,6 +101,7 @@ impl Node for Expression {
             Expression::IfExpression(i) => i.string(),
             Expression::FunctionLiteral(i) => i.string(),
             Expression::CallExpression(i) => i.string(),
+            Expression::ArrayLiteral(i) => i.string(),
         }
     }
 }
@@ -354,6 +357,32 @@ impl Node for IfExpression {
         );
         if let Some(else_block) = &self.else_block {
             result.push_str(&format!(" else {{\n{}\n}}", else_block.string()));
+        }
+        result
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ArrayLiteral {
+    pub token: Token,
+    pub elements: Vec<Expression>,
+}
+
+impl Node for ArrayLiteral {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+    fn string(&self) -> String {
+        let mut result = format!("[]");
+        if !self.elements.is_empty() {
+            result = format!(
+                "[{}]",
+                self.elements
+                    .iter()
+                    .map(|e| e.string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
         }
         result
     }

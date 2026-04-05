@@ -2,7 +2,7 @@ use crate::{
     ast::{Expression, Identifier, IfExpression, Program, Statement},
     builtin::get_builtin,
     environment::Environment,
-    object::{Boolean, Function, Integer, MonString, Null, Object, ReturnValue},
+    object::{Array, Boolean, Function, Integer, MonString, Null, Object, ReturnValue},
 };
 use std::{cell::RefCell, rc::Rc};
 
@@ -93,12 +93,21 @@ fn eval_expression(expr: &Expression, env: &mut Environment) -> Result<Object, S
         }
         Expression::CallExpression(ce) => {
             let f = eval_expression(&ce.function, env)?;
-            let args = eval_arguments(&ce.arugument, env)?;
+            let args = eval_expressions(&ce.arugument, env)?;
             call_function(f, args)
         }
         Expression::StringLiteral(se) => Ok(Object::MonString(MonString {
             value: se.value.clone(),
         })),
+        Expression::ArrayLiteral(ae) => {
+            let args = eval_expressions(&ae.elements, env)?;
+            Ok(Object::Array(Array::new(args)))
+        }
+        Expression::IndexExpression(ie) => {
+            let left = eval_expression(&ie.left, env)?;
+            let index = eval_expression(&ie.index, env)?;
+            eval_index_expression(left, index)
+        }
         _ => Err(format!("no support eval expression")),
     }
 }
@@ -230,7 +239,7 @@ fn eval_identifier(ident: &Identifier, env: &Environment) -> Result<Object, Stri
     Err(format!("identifier not found: {}", ident.value))
 }
 
-fn eval_arguments(args: &Vec<Expression>, env: &mut Environment) -> Result<Vec<Object>, String> {
+fn eval_expressions(args: &Vec<Expression>, env: &mut Environment) -> Result<Vec<Object>, String> {
     let mut evaluated = Vec::new();
     for arg in args {
         let obj = eval_expression(arg, env)?;
@@ -286,6 +295,30 @@ fn call_function(f: Object, args: Vec<Object>) -> Result<Object, String> {
         Object::Builtin(b) => b.call(args),
         _ => Err(format!("expected Function object, got: {:?}", f)),
     }
+}
+
+fn eval_index_expression(left: Object, index: Object) -> Result<Object, String> {
+    match (left, index) {
+        (Object::Array(arr), Object::Integer(i)) => eval_array_index_expression(arr, i.value),
+        (Object::Array(_), other) => Err(format!(
+            "the index should be an integer, but got {:?}",
+            other
+        )),
+        (other, _) => Err(format!("{:?} is not indexable", other)),
+    }
+}
+
+fn eval_array_index_expression(arr: Array, idx: i64) -> Result<Object, String> {
+    if idx < 0 || idx as usize >= arr.len() {
+        return Err(format!(
+            "index out of bounds, len:{}, visit:{}",
+            arr.len(),
+            idx
+        ));
+    }
+
+    arr.get(idx as usize)
+        .ok_or_else(|| format!("index out of bounds, len:{}, visit:{}", arr.len(), idx))
 }
 
 #[cfg(test)]
@@ -969,6 +1002,108 @@ mod tests {
         for tc in tests {
             let got = string_to_ast(tc.input);
 
+            if let Some(expected_err) = tc.expected_err_contains {
+                assert!(got.is_err(), "expected error for input: {}", tc.input);
+                let err = got.unwrap_err();
+                assert!(
+                    err.contains(expected_err),
+                    "input: {}, expected err contains: {}, got: {}",
+                    tc.input,
+                    expected_err,
+                    err
+                );
+                continue;
+            }
+
+            let got = got.expect(tc.input);
+            match got {
+                Object::Integer(i) => {
+                    assert_eq!(Some(i.value), tc.expected_int, "input: {}", tc.input)
+                }
+                other => panic!("input: {}, expected Integer, got {:?}", tc.input, other),
+            }
+        }
+    }
+
+    #[test]
+    fn test_array() {
+        struct TestCase {
+            input: &'static str,
+            expected: Vec<i64>,
+        }
+
+        let tests = vec![TestCase {
+            input: "[1,2*3, 5+1]",
+            expected: vec![1, 6, 6],
+        }];
+
+        for tc in tests {
+            let got = string_to_ast(tc.input).expect(tc.input);
+            match got {
+                Object::Array(arr) => {
+                    assert_eq!(arr.len(), tc.expected.len(), "input: {}", tc.input);
+                    for (idx, expected) in tc.expected.iter().enumerate() {
+                        let elem = arr
+                            .get(idx)
+                            .unwrap_or_else(|| panic!("missing index {} for input {}", idx, tc.input));
+                        match elem {
+                            Object::Integer(i) => {
+                                assert_eq!(i.value, *expected, "input: {}, index: {}", tc.input, idx)
+                            }
+                            other => {
+                                panic!("input: {}, expected Integer, got {:?}", tc.input, other)
+                            }
+                        }
+                    }
+                }
+                other => panic!("input: {}, expected Array, got {:?}", tc.input, other),
+            }
+        }
+    }
+
+    #[test]
+    fn test_index() {
+        struct TestCase {
+            input: &'static str,
+            expected_int: Option<i64>,
+            expected_err_contains: Option<&'static str>,
+        }
+
+        let tests = vec![
+            TestCase {
+                input: "[1,2,3][2]",
+                expected_int: Some(3),
+                expected_err_contains: None,
+            },
+            TestCase {
+                input: "1[1]",
+                expected_int: None,
+                expected_err_contains: Some("is not indexable"),
+            },
+            TestCase {
+                input: "[1,2,3][true]",
+                expected_int: None,
+                expected_err_contains: Some("the index should be an integer"),
+            },
+            TestCase {
+                input: "[1,2,3][3]",
+                expected_int: None,
+                expected_err_contains: Some("out of bounds, len:3, visit:3"),
+            },
+            TestCase {
+                input: "[1,2*3, 5+1][1]",
+                expected_int: Some(6),
+                expected_err_contains: None,
+            },
+            TestCase {
+                input: "let a = [1,2,3,4,[5,6]]; a[4][1]",
+                expected_int: Some(6),
+                expected_err_contains: None,
+            },
+        ];
+
+        for tc in tests {
+            let got = string_to_ast(tc.input);
             if let Some(expected_err) = tc.expected_err_contains {
                 assert!(got.is_err(), "expected error for input: {}", tc.input);
                 let err = got.unwrap_err();

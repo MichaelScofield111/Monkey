@@ -1,7 +1,7 @@
 use std::fmt;
 
 use crate::{
-    ast::{BlockStatement, Identifier, Node},
+    ast::{BlockStatement, Expression, Identifier, Node},
     environment::Environment,
 };
 
@@ -14,6 +14,7 @@ pub enum ObjectType {
     Function,
     MonString,
     Builtin,
+    Array,
 }
 
 impl fmt::Display for ObjectType {
@@ -26,6 +27,7 @@ impl fmt::Display for ObjectType {
             ObjectType::Function => write!(f, "FUNCTION"),
             ObjectType::MonString => write!(f, "STRING"),
             ObjectType::Builtin => write!(f, "BUILTIN"),
+            ObjectType::Array => write!(f, "ARRAY"),
         }
     }
 }
@@ -39,6 +41,7 @@ pub enum Object {
     Function(Function),
     MonString(MonString),
     Builtin(Builtin),
+    Array(Array),
 }
 
 impl Object {
@@ -51,6 +54,7 @@ impl Object {
             Object::Function(f) => f.inspect(),
             Object::MonString(f) => f.inspect(),
             Object::Builtin(f) => f.inspect(),
+            Object::Array(f) => f.inspect(),
         }
     }
     // ...
@@ -173,5 +177,39 @@ impl Builtin {
 
     pub fn object_type(&self) -> ObjectType {
         ObjectType::Builtin
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Array {
+    pub elements: Vec<Object>,
+}
+
+impl Array {
+    pub fn new(elements: Vec<Object>) -> Self {
+        Self { elements }
+    }
+
+    pub fn len(&self) -> usize {
+        self.elements.len()
+    }
+
+    pub fn get(&self, index: usize) -> Option<Object> {
+        self.elements.get(index).cloned()
+    }
+
+    pub fn inspect(&self) -> String {
+        format!(
+            "[{}]",
+            self.elements
+                .iter()
+                .map(|e| e.inspect())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    }
+
+    pub fn object_type(&self) -> ObjectType {
+        ObjectType::Array
     }
 }

@@ -1,9 +1,9 @@
 use crate::{
     ast::{
         ArrayLiteral, BlockStatement, BooleanExpression, CallExpression, Expression,
-        ExpressionStatement, FunctionLiteral, Identifier, IfExpression, InfixExpression,
-        IntegerLiteral, LetStatement, PrefixExpression, Program, ReturnStatement, Statement,
-        StringLiteral,
+        ExpressionStatement, FunctionLiteral, Identifier, IfExpression, IndexExpression,
+        InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, Program, ReturnStatement,
+        Statement, StringLiteral,
     },
     lexer::Lexer,
     token::{Token, TokenType},
@@ -21,6 +21,7 @@ pub enum Precedence {
     // (-X) * Y: -X is first Precedence
     Prefix, // -X or !X
     Call,   // fn()
+    Index,  // []
 }
 
 impl Precedence {
@@ -33,6 +34,7 @@ impl Precedence {
             Precedence::Product => 5,
             Precedence::Prefix => 6,
             Precedence::Call => 7,
+            Precedence::Index => 8,
         }
     }
 
@@ -44,6 +46,7 @@ impl Precedence {
             5 => Precedence::Product,
             6 => Precedence::Prefix,
             7 => Precedence::Call,
+            8 => Precedence::Index,
             _ => Precedence::Lowest,
         }
     }
@@ -76,6 +79,7 @@ impl<'a> Parser<'a> {
             TokenType::Plus | TokenType::Minus => Precedence::Sum.as_num(),
             TokenType::Asterisk | TokenType::Slash => Precedence::Product.as_num(),
             TokenType::Lparen => Precedence::Call.as_num(),
+            TokenType::LBracket => Precedence::Index.as_num(),
             _ => Precedence::Lowest.as_num(),
         }
     }
@@ -108,6 +112,25 @@ impl<'a> Parser<'a> {
         }
 
         program
+    }
+
+    fn parse_index_expression(&mut self, lhs: Expression) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        self.next_token();
+
+        let Some(index) = self.parse_expression(Precedence::Lowest) else {
+            return None;
+        };
+
+        if !self.expect_peek(TokenType::RBracket) {
+            return None;
+        }
+
+        Some(Expression::IndexExpression(IndexExpression {
+            token,
+            left: Box::new(lhs),    // ← 关键：lhs 是 "arr"
+            index: Box::new(index), // ← index 是 "5"
+        }))
     }
 
     /// Let x = 10 + 10 + 5;
@@ -217,6 +240,7 @@ impl<'a> Parser<'a> {
                 | TokenType::Noteq
                 | TokenType::Lt
                 | TokenType::Gt
+                | TokenType::LBracket
                 | TokenType::Lparen => {
                     self.next_token(); // cur becomes the operator
                     // left need to cal with next token
@@ -241,6 +265,10 @@ impl<'a> Parser<'a> {
         // lhs = add
         if self.current_token_is(&TokenType::Lparen) {
             return self.parse_function_call(lhs);
+        }
+
+        if self.current_token_is(&TokenType::LBracket) {
+            return self.parse_index_expression(lhs);
         }
 
         // Remember *this* operator's precedence as the new floor for rhs.
@@ -862,7 +890,7 @@ mod tests {
 
     #[test]
     fn test_array_literal() {
-        let tests = vec![("[1,3*3]", vec![1, 2])];
+        let tests = vec![("[1,2*3]", vec![1, 6])];
 
         for (input, _expected_values) in tests {
             let l = Lexer::new(input);
@@ -900,7 +928,7 @@ mod tests {
                     assert_eq!(inf.op, "*", "input: {}", input);
 
                     match &*inf.lhs {
-                        Expression::IntegerLiteral(i) => assert_eq!(i.value, 3, "input: {}", input),
+                        Expression::IntegerLiteral(i) => assert_eq!(i.value, 2, "input: {}", input),
                         other => panic!("expected lhs int 2, got {:?}, input: {}", other, input),
                     }
                     match &*inf.rhs {
@@ -912,6 +940,55 @@ mod tests {
                     "expected second element infix expression, got {:?}, input: {}",
                     other, input
                 ),
+            }
+        }
+    }
+
+    #[test]
+    fn test_index_expression() {
+        let tests = vec!["myArray[1+2]"];
+
+        for input in tests {
+            let l = Lexer::new(input);
+            let mut p = Parser::new(l);
+            let program = p.parse_program();
+            check_parser_errors(&p);
+
+            assert_eq!(program.statements.len(), 1, "input: {}", input);
+
+            let stmt = match &program.statements[0] {
+                Statement::Expression(es) => es,
+                other => panic!(
+                    "expected ExpressionStatement, got {:?}, input: {}",
+                    other, input
+                ),
+            };
+
+            let idx = match &stmt.expression {
+                Some(Expression::IndexExpression(i)) => i,
+                other => panic!("expected IndexExpression, got {:?}, input: {}", other, input),
+            };
+
+            match &*idx.left {
+                Expression::Identifier(ident) => {
+                    assert_eq!(ident.value, "myArray", "input: {}", input)
+                }
+                other => panic!("expected left identifier, got {:?}, input: {}", other, input),
+            }
+
+            match &*idx.index {
+                Expression::Infix(inf) => {
+                    assert_eq!(inf.op, "+", "input: {}", input);
+                    match &*inf.lhs {
+                        Expression::IntegerLiteral(i) => assert_eq!(i.value, 1, "input: {}", input),
+                        other => panic!("expected index lhs int 1, got {:?}, input: {}", other, input),
+                    }
+                    match &*inf.rhs {
+                        Expression::IntegerLiteral(i) => assert_eq!(i.value, 2, "input: {}", input),
+                        other => panic!("expected index rhs int 2, got {:?}, input: {}", other, input),
+                    }
+                }
+                other => panic!("expected index infix expression, got {:?}, input: {}", other, input),
             }
         }
     }

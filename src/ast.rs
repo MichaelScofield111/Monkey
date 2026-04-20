@@ -72,6 +72,7 @@ pub enum Expression {
     FunctionLiteral(FunctionLiteral),
     CallExpression(CallExpression),
     ArrayLiteral(ArrayLiteral),
+    IndexExpression(IndexExpression),
 }
 
 impl Node for Expression {
@@ -87,6 +88,7 @@ impl Node for Expression {
             Expression::FunctionLiteral(i) => i.token_literal(),
             Expression::CallExpression(i) => i.token_literal(),
             Expression::ArrayLiteral(i) => i.token_literal(),
+            Expression::IndexExpression(i) => i.token_literal(),
         }
     }
 
@@ -102,6 +104,7 @@ impl Node for Expression {
             Expression::FunctionLiteral(i) => i.string(),
             Expression::CallExpression(i) => i.string(),
             Expression::ArrayLiteral(i) => i.string(),
+            Expression::IndexExpression(i) => i.string(),
         }
     }
 }
@@ -385,6 +388,22 @@ impl Node for ArrayLiteral {
             );
         }
         result
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct IndexExpression {
+    pub token: Token,
+    pub left: Box<Expression>, // Left: 一个 Identifier 表达式，值为 "arr"（表示变量名）
+    pub index: Box<Expression>, //Index: 一个 IntegerLiteral 表达式，值为 5
+}
+
+impl Node for IndexExpression {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+    fn string(&self) -> String {
+        format!("({}[{}])", self.left.string(), self.index.string())
     }
 }
 

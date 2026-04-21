@@ -8,4 +8,4 @@ mod parser;
 mod repl;
 mod token;
 
-pub use repl::start;
+pub use repl::{run_file, start};

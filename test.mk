@@ -30,3 +30,34 @@ last(array)
 rest(array)
 rest(rest(array))
 len(rest(array))
+
+
+let map = fn(arr, f) {
+	let iter = fn(res, arr) {
+		if (len(arr) == 0) {
+			return res;
+		}
+		return iter(push(res, f(first(arr))), rest(arr));
+	};
+
+	iter([], arr)
+};
+
+let a = [1,2,3,4,5];
+let double = fn(x) { 2 * x };
+map(a, double)
+
+let reduce = fn(f, arr, initial) {
+	let iter = fn(prev, arr) {
+		if (len(arr) == 0) {
+			return prev;
+		}
+		return iter(f(prev, first(arr)), rest(arr));
+	};
+
+	iter(initial, arr)
+};
+
+let a = [1,2,3,4,5];
+let add = fn(x, y) {  x + y };
+reduce(add, a, 0)

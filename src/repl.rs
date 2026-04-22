@@ -1,7 +1,9 @@
 use std::{
+    cell::RefCell,
     fs,
     io::{self, BufRead, Write},
     path::Path,
+    rc::Rc,
 };
 
 use crate::{
@@ -28,7 +30,7 @@ pub fn start<R: BufRead, W: Write>(mut input: R, mut output: W) -> io::Result<()
     writeln!(output, "{}", MONKEY_FACE)?;
 
     let mut line = String::new();
-    let mut env = Environment::new();
+    let env = Rc::new(RefCell::new(Environment::new()));
     loop {
         write!(output, "{}", PROMPT)?;
         output.flush()?;
@@ -47,7 +49,7 @@ pub fn start<R: BufRead, W: Write>(mut input: R, mut output: W) -> io::Result<()
             print_errors(&mut output, &p.errors)?;
             continue;
         }
-        match eval(&program, &mut env) {
+        match eval(&program, env.clone()) {
             Ok(obj) => {
                 if !matches!(obj, Object::Null(_)) {
                     writeln!(output, "{}", obj.inspect())?;
@@ -85,13 +87,13 @@ pub fn run_file<P: AsRef<Path>, W: Write, E: Write>(
         return Err(io::Error::new(io::ErrorKind::InvalidData, "parse error"));
     }
 
-    let mut env = Environment::new();
+    let env = Rc::new(RefCell::new(Environment::new()));
     for stmt in &program.statements {
         let one_stmt_program = Program {
             statements: vec![stmt.clone()],
         };
 
-        match eval(&one_stmt_program, &mut env) {
+        match eval(&one_stmt_program, env.clone()) {
             Ok(obj) => {
                 if !matches!(obj, Object::Null(_)) {
                     writeln!(output, "{}", obj.inspect())?;

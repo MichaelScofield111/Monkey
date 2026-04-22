@@ -1,7 +1,8 @@
 use std::fmt;
+use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    ast::{BlockStatement, Expression, Identifier, Node},
+    ast::{BlockStatement, Identifier, Node},
     environment::Environment,
 };
 
@@ -118,7 +119,7 @@ impl ReturnValue {
 pub struct Function {
     pub params: Vec<Identifier>,
     pub body: BlockStatement,
-    pub env: Environment,
+    pub env: Rc<RefCell<Environment>>,
 }
 
 impl Function {

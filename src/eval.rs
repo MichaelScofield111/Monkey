@@ -6,14 +6,17 @@ use crate::{
 };
 use std::{cell::RefCell, rc::Rc};
 
-pub fn eval(ast: &Program, env: &mut Environment) -> Result<Object, String> {
+pub fn eval(ast: &Program, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
     eval_statements(&ast.statements, env)
 }
 
-fn eval_statements(stmts: &Vec<Statement>, env: &mut Environment) -> Result<Object, String> {
+fn eval_statements(
+    stmts: &Vec<Statement>,
+    env: Rc<RefCell<Environment>>,
+) -> Result<Object, String> {
     let mut result = Object::Null(Null {});
     for stmt in stmts {
-        result = eval_statement(stmt, env)?;
+        result = eval_statement(stmt, env.clone())?;
 
         // top level
         if let Object::ReturnValue(rv) = result {
@@ -24,23 +27,23 @@ fn eval_statements(stmts: &Vec<Statement>, env: &mut Environment) -> Result<Obje
     Ok(result)
 }
 
-fn eval_statement(stmt: &Statement, env: &mut Environment) -> Result<Object, String> {
+fn eval_statement(stmt: &Statement, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
     match stmt {
         Statement::Expression(es) => match &es.expression {
-            Some(expr) => eval_expression(expr, env),
+            Some(expr) => eval_expression(expr, env.clone()),
             None => Ok(Object::Null(Null {})),
         },
         Statement::Let(ls) => {
             let val = match &ls.value {
-                Some(expr) => eval_expression(expr, env)?,
+                Some(expr) => eval_expression(expr, env.clone())?,
                 None => return Err(format!("let statement missing value {}", ls.name.value)),
             };
-            env.set(&ls.name.value, val);
+            env.borrow_mut().set(&ls.name.value, val);
             Ok(Object::Null(Null {}))
         }
         Statement::Return(rs) => match &rs.value {
             Some(expr) => {
-                let val = eval_expression(expr, env)?;
+                let val = eval_expression(expr, env.clone())?;
                 Ok(Object::ReturnValue(ReturnValue {
                     value: Box::new(val), // Box::new 包装
                 }))
@@ -49,19 +52,19 @@ fn eval_statement(stmt: &Statement, env: &mut Environment) -> Result<Object, Str
                 value: Box::new(Object::Null(Null {})),
             })),
         },
-        Statement::BlockStatement(bs) => eval_block_statement(&bs.statements, env),
+        Statement::BlockStatement(bs) => eval_block_statement(&bs.statements, env.clone()),
     }
 }
 
-fn eval_expression(expr: &Expression, env: &mut Environment) -> Result<Object, String> {
+fn eval_expression(expr: &Expression, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
     match expr {
         // integer
         Expression::IntegerLiteral(i) => Ok(Object::Integer(Integer { value: i.value })),
         Expression::Boolean(i) => Ok(Object::Boolean(Boolean { value: i.value })),
         // parse to bind identifier
-        Expression::Identifier(i) => eval_identifier(i, env),
+        Expression::Identifier(i) => eval_identifier(i, env.clone()),
         // parser if() {..} else {..}
-        Expression::IfExpression(i) => eval_ifexpression(i, env),
+        Expression::IfExpression(i) => eval_ifexpression(i, env.clone()),
         Expression::FunctionLiteral(fl) => {
             let mut params = Vec::with_capacity(fl.parameters.len());
             for param in &fl.parameters {
@@ -83,29 +86,29 @@ fn eval_expression(expr: &Expression, env: &mut Environment) -> Result<Object, S
             }))
         }
         Expression::Prefix(prefix) => {
-            let rhs = eval_expression(&prefix.rhs, env)?;
+            let rhs = eval_expression(&prefix.rhs, env.clone())?;
             eval_prefix_expression(&prefix.op, rhs)
         }
         Expression::Infix(infix) => {
-            let lhs = eval_expression(&infix.lhs, env)?;
-            let rhs = eval_expression(&infix.rhs, env)?;
+            let lhs = eval_expression(&infix.lhs, env.clone())?;
+            let rhs = eval_expression(&infix.rhs, env.clone())?;
             eval_infix_expression(&infix.op, lhs, rhs)
         }
         Expression::CallExpression(ce) => {
-            let f = eval_expression(&ce.function, env)?;
-            let args = eval_expressions(&ce.arugument, env)?;
+            let f = eval_expression(&ce.function, env.clone())?;
+            let args = eval_expressions(&ce.arugument, env.clone())?;
             call_function(f, args)
         }
         Expression::StringLiteral(se) => Ok(Object::MonString(MonString {
             value: se.value.clone(),
         })),
         Expression::ArrayLiteral(ae) => {
-            let args = eval_expressions(&ae.elements, env)?;
+            let args = eval_expressions(&ae.elements, env.clone())?;
             Ok(Object::Array(Array::new(args)))
         }
         Expression::IndexExpression(ie) => {
-            let left = eval_expression(&ie.left, env)?;
-            let index = eval_expression(&ie.index, env)?;
+            let left = eval_expression(&ie.left, env.clone())?;
+            let index = eval_expression(&ie.index, env.clone())?;
             eval_index_expression(left, index)
         }
         _ => Err(format!("no support eval expression")),
@@ -174,10 +177,13 @@ fn eval_infix_integer(left: &Integer, right: &Integer, op: &str) -> Result<Objec
     }
 }
 
-fn eval_block_statement(stmts: &Vec<Statement>, env: &mut Environment) -> Result<Object, String> {
+fn eval_block_statement(
+    stmts: &Vec<Statement>,
+    env: Rc<RefCell<Environment>>,
+) -> Result<Object, String> {
     let mut result = Object::Null(Null {});
     for stmt in stmts {
-        result = eval_statement(stmt, env)?;
+        result = eval_statement(stmt, env.clone())?;
         // block 内不要解包，原样向外冒泡
         if let Object::ReturnValue(_) = result {
             return Ok(result);
@@ -187,20 +193,20 @@ fn eval_block_statement(stmts: &Vec<Statement>, env: &mut Environment) -> Result
 }
 
 // if (condition) {..} else {..}
-fn eval_ifexpression(ep: &IfExpression, env: &mut Environment) -> Result<Object, String> {
+fn eval_ifexpression(ep: &IfExpression, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
     // condition
     // - integer
     // - boolean
     // - null
-    let condition = eval_expression(&ep.condition, env)?;
+    let condition = eval_expression(&ep.condition, env.clone())?;
     // if(1 + 1) {
     //  if (...) {
     //   }
     // }
     if is_true(&condition) {
-        eval_block_statement(&ep.if_block.statements, env)
+        eval_block_statement(&ep.if_block.statements, env.clone())
     } else if let Some(x) = ep.else_block.as_ref() {
-        eval_block_statement(&x.statements, env)
+        eval_block_statement(&x.statements, env.clone())
     } else {
         Ok(Object::Null(Null {})) // 没有 else 块就返回 Null
     }
@@ -227,8 +233,8 @@ fn eval_infix_boolean(l: &Boolean, r: &Boolean, op: &str) -> Result<Object, Stri
     }
 }
 
-fn eval_identifier(ident: &Identifier, env: &Environment) -> Result<Object, String> {
-    if let Some(obj) = env.get(&ident.value) {
+fn eval_identifier(ident: &Identifier, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
+    if let Some(obj) = env.borrow().get(&ident.value) {
         return Ok(obj);
     }
 
@@ -239,10 +245,13 @@ fn eval_identifier(ident: &Identifier, env: &Environment) -> Result<Object, Stri
     Err(format!("identifier not found: {}", ident.value))
 }
 
-fn eval_expressions(args: &Vec<Expression>, env: &mut Environment) -> Result<Vec<Object>, String> {
+fn eval_expressions(
+    args: &Vec<Expression>,
+    env: Rc<RefCell<Environment>>,
+) -> Result<Vec<Object>, String> {
     let mut evaluated = Vec::new();
     for arg in args {
-        let obj = eval_expression(arg, env)?;
+        let obj = eval_expression(arg, env.clone())?;
         evaluated.push(obj);
     }
     Ok(evaluated)
@@ -280,12 +289,11 @@ fn call_function(f: Object, args: Vec<Object>) -> Result<Object, String> {
                 ));
             }
 
-            let parent = Rc::new(RefCell::new(fun.env));
-            let mut env = Environment::new_enclosed(parent);
+            let mut env = Environment::new_enclosed(fun.env.clone());
             for (param, arg) in fun.params.iter().zip(args.into_iter()) {
                 env.set(&param.value, arg);
             }
-            let evaluated = eval_block_statement(&fun.body.statements, &mut env)?;
+            let evaluated = eval_block_statement(&fun.body.statements, Rc::new(RefCell::new(env)))?;
             if let Object::ReturnValue(rv) = evaluated {
                 Ok(*rv.value)
             } else {
@@ -337,8 +345,8 @@ mod tests {
             return Err(errors.join("; "));
         }
 
-        let mut env = Environment::new();
-        eval(&program, &mut env)
+        let env = Rc::new(RefCell::new(Environment::new()));
+        eval(&program, env)
     }
 
     fn assert_integer_object(obj: &Object, expected: i64) {
@@ -847,6 +855,57 @@ mod tests {
     }
 
     #[test]
+    fn test_recursive_function_call() {
+        let input = r#"
+            let fact = fn(n) {
+                if (n == 0) {
+                    return 1;
+                }
+                return n * fact(n - 1);
+            };
+            fact(5);
+        "#;
+        let result = string_to_ast(input).expect(input);
+        assert_integer_object(&result, 120);
+    }
+
+    #[test]
+    fn test_recursive_map_iter() {
+        let input = r#"
+            let map = fn(arr, f) {
+                let iter = fn(res, arr) {
+                    if (len(arr) == 0) {
+                        return res;
+                    }
+                    return iter(push(res, f(first(arr))), rest(arr));
+                };
+
+                iter([], arr);
+            };
+
+            let a = [1,2,3,4,5];
+            let double = fn(x) { 2 * x };
+            map(a, double);
+        "#;
+
+        let result = string_to_ast(input).expect(input);
+        match result {
+            Object::Array(arr) => {
+                let expected = [2, 4, 6, 8, 10];
+                assert_eq!(arr.len(), expected.len());
+                for (idx, expected_value) in expected.iter().enumerate() {
+                    let elem = arr.get(idx).expect("array index should exist");
+                    match elem {
+                        Object::Integer(i) => assert_eq!(i.value, *expected_value),
+                        other => panic!("expected Integer object, got: {:?}", other),
+                    }
+                }
+            }
+            other => panic!("expected Array object, got: {:?}", other),
+        }
+    }
+
+    #[test]
     fn test_function_call_wrong_arity() {
         let tests = vec![
             "let add = fn(a, b) { a + b; }; add(1);",
@@ -1043,12 +1102,16 @@ mod tests {
                 Object::Array(arr) => {
                     assert_eq!(arr.len(), tc.expected.len(), "input: {}", tc.input);
                     for (idx, expected) in tc.expected.iter().enumerate() {
-                        let elem = arr
-                            .get(idx)
-                            .unwrap_or_else(|| panic!("missing index {} for input {}", idx, tc.input));
+                        let elem = arr.get(idx).unwrap_or_else(|| {
+                            panic!("missing index {} for input {}", idx, tc.input)
+                        });
                         match elem {
                             Object::Integer(i) => {
-                                assert_eq!(i.value, *expected, "input: {}, index: {}", tc.input, idx)
+                                assert_eq!(
+                                    i.value, *expected,
+                                    "input: {}, index: {}",
+                                    tc.input, idx
+                                )
                             }
                             other => {
                                 panic!("input: {}, expected Integer, got {:?}", tc.input, other)

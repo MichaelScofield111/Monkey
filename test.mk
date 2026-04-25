@@ -1,4 +1,4 @@
-1+2
+1+2;
 let a = 1000;
 let b = 2000;
 a + b;
@@ -60,4 +60,14 @@ let reduce = fn(f, arr, initial) {
 
 let a = [1,2,3,4,5];
 let add = fn(x, y) {  x + y };
-reduce(add, a, 0)
+reduce(add, a, 10)
+
+let sum = fn(arr) {
+	reduce(add, arr, 0)
+};
+sum([1,2,3,4,5])
+sum([145,46269,4524])
+
+let a = [1,2,3,4,5];
+print(a);
+print(rest(a));

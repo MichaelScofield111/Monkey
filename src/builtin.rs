@@ -1,4 +1,4 @@
-use crate::object::{Array, Boolean, Builtin, Integer, MonString, Object};
+use crate::object::{Array, Boolean, Builtin, Integer, MonString, Null, Object};
 
 pub fn get_builtin(name: &str) -> Option<Object> {
     match name {
@@ -7,8 +7,24 @@ pub fn get_builtin(name: &str) -> Option<Object> {
         "last" => Some(Object::Builtin(Builtin::new(name, builtin_last))),
         "rest" => Some(Object::Builtin(Builtin::new(name, builtin_rest))),
         "push" => Some(Object::Builtin(Builtin::new(name, builtin_push))),
+        "print" => Some(Object::Builtin(Builtin::new(name, builtin_print))),
         _ => None,
     }
+}
+
+fn builtin_print(args: Vec<Object>) -> Result<Object, String> {
+    if args.len() != 1 {
+        return Err(format!(
+            "wrong number of arguments, expected {}, but got {}",
+            1,
+            args.len()
+        ));
+    }
+
+    for arg in args {
+        println!("{}", arg.inspect());
+    }
+    Ok(Object::Null(Null))
 }
 
 fn builtin_push(args: Vec<Object>) -> Result<Object, String> {

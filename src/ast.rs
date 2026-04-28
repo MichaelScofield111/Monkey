@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::token::Token;
 
 // Node is a ability
@@ -404,6 +406,26 @@ impl Node for IndexExpression {
     }
     fn string(&self) -> String {
         format!("({}[{}])", self.left.string(), self.index.string())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct HashLiteral {
+    pub token: Token, // "{"
+    pub pairs: HashMap<Expression, Expression>,
+}
+
+impl Node for HashLiteral {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+    fn string(&self) -> String {
+        let pair_str: Vec<String> = self
+            .pairs
+            .iter()
+            .map(|(k, v)| format!("{}:{}", k.string(), v.string()))
+            .collect();
+        format!("{{{}}}", pair_str.join(","))
     }
 }
 

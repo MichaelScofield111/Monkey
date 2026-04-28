@@ -183,6 +183,10 @@ impl<'a> Lexer<'a> {
                 r#type: TokenType::Gt,
                 literal: (self.ch as char).to_string(),
             },
+            b':' => Token {
+                r#type: TokenType::Colon,
+                literal: (self.ch as char).to_string(),
+            },
             0 => Token {
                 r#type: TokenType::Eof,
                 literal: "".to_string(),

@@ -24,6 +24,7 @@ pub enum TokenType {
 
     Comma,
     Semicolon,
+    Colon,
 
     Lparen,
     Rparen,
@@ -134,6 +135,7 @@ mod tests {
                "foo bar"
                [
                ]
+               {"foo": "bar"}
                "#;
 
         let tests = vec![
@@ -213,6 +215,11 @@ mod tests {
             (TokenType::String, "foo bar"),
             (TokenType::LBracket, "["),
             (TokenType::RBracket, "]"),
+            (TokenType::Lbrace, "{"),
+            (TokenType::String, "foo"),
+            (TokenType::Colon, ":"),
+            (TokenType::String, "bar"),
+            (TokenType::Rbrace, "}"),
             (TokenType::Eof, ""),
         ];
 

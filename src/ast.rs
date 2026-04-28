@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::token::Token;
 
 // Node is a ability
@@ -75,6 +73,7 @@ pub enum Expression {
     CallExpression(CallExpression),
     ArrayLiteral(ArrayLiteral),
     IndexExpression(IndexExpression),
+    HashExpression(HashLiteral),
 }
 
 impl Node for Expression {
@@ -91,6 +90,7 @@ impl Node for Expression {
             Expression::CallExpression(i) => i.token_literal(),
             Expression::ArrayLiteral(i) => i.token_literal(),
             Expression::IndexExpression(i) => i.token_literal(),
+            Expression::HashExpression(i) => i.token_literal(),
         }
     }
 
@@ -107,6 +107,7 @@ impl Node for Expression {
             Expression::CallExpression(i) => i.string(),
             Expression::ArrayLiteral(i) => i.string(),
             Expression::IndexExpression(i) => i.string(),
+            Expression::HashExpression(i) => i.string(),
         }
     }
 }
@@ -412,7 +413,7 @@ impl Node for IndexExpression {
 #[derive(Debug, Clone)]
 pub struct HashLiteral {
     pub token: Token, // "{"
-    pub pairs: HashMap<Expression, Expression>,
+    pub pairs: Vec<(Expression, Expression)>,
 }
 
 impl Node for HashLiteral {

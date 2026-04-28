@@ -1,9 +1,9 @@
 use crate::{
     ast::{
         ArrayLiteral, BlockStatement, BooleanExpression, CallExpression, Expression,
-        ExpressionStatement, FunctionLiteral, Identifier, IfExpression, IndexExpression,
-        InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, Program, ReturnStatement,
-        Statement, StringLiteral,
+        ExpressionStatement, FunctionLiteral, HashLiteral, Identifier, IfExpression,
+        IndexExpression, InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, Program,
+        ReturnStatement, Statement, StringLiteral,
     },
     lexer::Lexer,
     token::{Token, TokenType},
@@ -304,6 +304,7 @@ impl<'a> Parser<'a> {
             TokenType::Function => self.parse_function_literal(),
             TokenType::String => self.parse_string_literal(),
             TokenType::LBracket => self.parse_array_literal(),
+            TokenType::Lbrace => self.parse_hash_literal(),
             _ => {
                 let msg = format!(
                     "no prefix parse function for {:?} found",
@@ -526,6 +527,38 @@ impl<'a> Parser<'a> {
             token,
             elements: self.parse_expression_list(TokenType::RBracket),
         }))
+    }
+
+    fn parse_hash_literal(&mut self) -> Option<Expression> {
+        // now is { token
+        let token = self.cur_token.clone();
+        let mut pairs = Vec::new();
+
+        // parse key value pairs
+        while !self.peek_token_is(&TokenType::Rbrace) {
+            // eat "{"token and "," token
+            self.next_token();
+            let key = self.parse_expression(Precedence::Lowest)?;
+
+            if !self.expect_peek(TokenType::Colon) {
+                return None;
+            }
+
+            self.next_token();
+            let value = self.parse_expression(Precedence::Lowest)?;
+
+            pairs.push((key, value));
+
+            if !self.peek_token_is(&TokenType::Rbrace) && !self.expect_peek(TokenType::Comma) {
+                return None;
+            }
+        }
+
+        if !self.expect_peek(TokenType::Rbrace) {
+            return None;
+        }
+
+        Some(Expression::HashExpression(HashLiteral { token, pairs }))
     }
 
     fn parse_expression_list(&mut self, end: TokenType) -> Vec<Expression> {
@@ -966,14 +999,20 @@ mod tests {
 
             let idx = match &stmt.expression {
                 Some(Expression::IndexExpression(i)) => i,
-                other => panic!("expected IndexExpression, got {:?}, input: {}", other, input),
+                other => panic!(
+                    "expected IndexExpression, got {:?}, input: {}",
+                    other, input
+                ),
             };
 
             match &*idx.left {
                 Expression::Identifier(ident) => {
                     assert_eq!(ident.value, "myArray", "input: {}", input)
                 }
-                other => panic!("expected left identifier, got {:?}, input: {}", other, input),
+                other => panic!(
+                    "expected left identifier, got {:?}, input: {}",
+                    other, input
+                ),
             }
 
             match &*idx.index {
@@ -981,14 +1020,199 @@ mod tests {
                     assert_eq!(inf.op, "+", "input: {}", input);
                     match &*inf.lhs {
                         Expression::IntegerLiteral(i) => assert_eq!(i.value, 1, "input: {}", input),
-                        other => panic!("expected index lhs int 1, got {:?}, input: {}", other, input),
+                        other => panic!(
+                            "expected index lhs int 1, got {:?}, input: {}",
+                            other, input
+                        ),
                     }
                     match &*inf.rhs {
                         Expression::IntegerLiteral(i) => assert_eq!(i.value, 2, "input: {}", input),
-                        other => panic!("expected index rhs int 2, got {:?}, input: {}", other, input),
+                        other => panic!(
+                            "expected index rhs int 2, got {:?}, input: {}",
+                            other, input
+                        ),
                     }
                 }
-                other => panic!("expected index infix expression, got {:?}, input: {}", other, input),
+                other => panic!(
+                    "expected index infix expression, got {:?}, input: {}",
+                    other, input
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_hash_literal_empty() {
+        let input = "{}";
+        let l = Lexer::new(input);
+        let mut p = Parser::new(l);
+        let program = p.parse_program();
+        check_parser_errors(&p);
+
+        assert_eq!(program.statements.len(), 1, "input: {}", input);
+        let expr_stmt = match &program.statements[0] {
+            Statement::Expression(es) => es,
+            other => panic!(
+                "expected ExpressionStatement, got {:?}, input: {}",
+                other, input
+            ),
+        };
+
+        let hash = match &expr_stmt.expression {
+            Some(Expression::HashExpression(h)) => h,
+            other => panic!("expected HashExpression, got {:?}, input: {}", other, input),
+        };
+        assert_eq!(hash.pairs.len(), 0, "input: {}", input);
+    }
+
+    #[test]
+    fn test_parse_hash_literal_single_pair() {
+        let input = r#"{"one": 1}"#;
+        let l = Lexer::new(input);
+        let mut p = Parser::new(l);
+        let program = p.parse_program();
+        check_parser_errors(&p);
+
+        let expr_stmt = match &program.statements[0] {
+            Statement::Expression(es) => es,
+            other => panic!(
+                "expected ExpressionStatement, got {:?}, input: {}",
+                other, input
+            ),
+        };
+        let hash = match &expr_stmt.expression {
+            Some(Expression::HashExpression(h)) => h,
+            other => panic!("expected HashExpression, got {:?}, input: {}", other, input),
+        };
+
+        assert_eq!(hash.pairs.len(), 1, "input: {}", input);
+        assert_eq!(hash.pairs[0].0.string(), "one", "input: {}", input);
+        assert_eq!(hash.pairs[0].1.string(), "1", "input: {}", input);
+    }
+
+    #[test]
+    fn test_parse_hash_literal_multiple_pairs_order() {
+        let input = r#"{"one": 1, "two": 2}"#;
+        let l = Lexer::new(input);
+        let mut p = Parser::new(l);
+        let program = p.parse_program();
+        check_parser_errors(&p);
+
+        let expr_stmt = match &program.statements[0] {
+            Statement::Expression(es) => es,
+            other => panic!(
+                "expected ExpressionStatement, got {:?}, input: {}",
+                other, input
+            ),
+        };
+        let hash = match &expr_stmt.expression {
+            Some(Expression::HashExpression(h)) => h,
+            other => panic!("expected HashExpression, got {:?}, input: {}", other, input),
+        };
+
+        assert_eq!(hash.pairs.len(), 2, "input: {}", input);
+        assert_eq!(hash.pairs[0].0.string(), "one", "input: {}", input);
+        assert_eq!(hash.pairs[0].1.string(), "1", "input: {}", input);
+        assert_eq!(hash.pairs[1].0.string(), "two", "input: {}", input);
+        assert_eq!(hash.pairs[1].1.string(), "2", "input: {}", input);
+    }
+
+    #[test]
+    fn test_parse_hash_literal_expression_value() {
+        let input = r#"{"sum": 1 + 2}"#;
+        let l = Lexer::new(input);
+        let mut p = Parser::new(l);
+        let program = p.parse_program();
+        check_parser_errors(&p);
+
+        let expr_stmt = match &program.statements[0] {
+            Statement::Expression(es) => es,
+            other => panic!(
+                "expected ExpressionStatement, got {:?}, input: {}",
+                other, input
+            ),
+        };
+        let hash = match &expr_stmt.expression {
+            Some(Expression::HashExpression(h)) => h,
+            other => panic!("expected HashExpression, got {:?}, input: {}", other, input),
+        };
+
+        assert_eq!(hash.pairs.len(), 1, "input: {}", input);
+        assert_eq!(hash.pairs[0].0.string(), "sum", "input: {}", input);
+        assert_eq!(hash.pairs[0].1.string(), "(1 + 2)", "input: {}", input);
+    }
+
+    #[test]
+    fn test_parse_hash_literal_mixed_keys_like_go() {
+        let cases = vec![
+            (
+                r#"{"foo": "bar", 2: true, "2": false, true: "TRUE"}"#,
+                false,
+            ),
+            ("{}", true),
+        ];
+
+        for (input, empty) in cases {
+            let l = Lexer::new(input);
+            let mut p = Parser::new(l);
+            let program = p.parse_program();
+            check_parser_errors(&p);
+
+            assert_eq!(program.statements.len(), 1, "input: {}", input);
+            let expr_stmt = match &program.statements[0] {
+                Statement::Expression(es) => es,
+                other => panic!(
+                    "expected ExpressionStatement, got {:?}, input: {}",
+                    other, input
+                ),
+            };
+            let hash = match &expr_stmt.expression {
+                Some(Expression::HashExpression(h)) => h,
+                other => panic!("expected HashExpression, got {:?}, input: {}", other, input),
+            };
+
+            if empty {
+                assert_eq!(hash.pairs.len(), 0, "input: {}", input);
+                continue;
+            }
+
+            assert_eq!(hash.pairs.len(), 4, "input: {}", input);
+            for (k, v) in &hash.pairs {
+                match k {
+                    Expression::StringLiteral(s) if s.value == "foo" => match v {
+                        Expression::StringLiteral(vs) => {
+                            assert_eq!(vs.value, "bar", "input: {}", input)
+                        }
+                        other => panic!(
+                            "expected value string for key foo, got {:?}, input: {}",
+                            other, input
+                        ),
+                    },
+                    Expression::StringLiteral(s) if s.value == "2" => match v {
+                        Expression::Boolean(vb) => assert!(!vb.value, "input: {}", input),
+                        other => panic!(
+                            "expected boolean false for key \"2\", got {:?}, input: {}",
+                            other, input
+                        ),
+                    },
+                    Expression::IntegerLiteral(i) if i.value == 2 => match v {
+                        Expression::Boolean(vb) => assert!(vb.value, "input: {}", input),
+                        other => panic!(
+                            "expected boolean true for key 2, got {:?}, input: {}",
+                            other, input
+                        ),
+                    },
+                    Expression::Boolean(b) if b.value => match v {
+                        Expression::StringLiteral(vs) => {
+                            assert_eq!(vs.value, "TRUE", "input: {}", input)
+                        }
+                        other => panic!(
+                            "expected string \"TRUE\" for key true, got {:?}, input: {}",
+                            other, input
+                        ),
+                    },
+                    other => panic!("unexpected hash key {:?}, input: {}", other, input),
+                }
             }
         }
     }

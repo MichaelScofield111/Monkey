@@ -1,4 +1,6 @@
+use std::collections::HashMap;
 use std::fmt;
+use std::hash::Hasher;
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
@@ -6,7 +8,7 @@ use crate::{
     environment::Environment,
 };
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ObjectType {
     Integer,
     Boolean,
@@ -16,6 +18,8 @@ pub enum ObjectType {
     MonString,
     Builtin,
     Array,
+    Hash,
+    HashPair,
 }
 
 impl fmt::Display for ObjectType {
@@ -29,6 +33,8 @@ impl fmt::Display for ObjectType {
             ObjectType::MonString => write!(f, "STRING"),
             ObjectType::Builtin => write!(f, "BUILTIN"),
             ObjectType::Array => write!(f, "ARRAY"),
+            ObjectType::Hash => write!(f, "HASH"),
+            ObjectType::HashPair => write!(f, "HASH_PAIR"),
         }
     }
 }
@@ -43,6 +49,7 @@ pub enum Object {
     MonString(MonString),
     Builtin(Builtin),
     Array(Array),
+    Hash(HashObject),
 }
 
 impl Object {
@@ -56,6 +63,7 @@ impl Object {
             Object::MonString(f) => f.inspect(),
             Object::Builtin(f) => f.inspect(),
             Object::Array(f) => f.inspect(),
+            Object::Hash(f) => f.inspect(),
         }
     }
     // ...
@@ -73,6 +81,12 @@ impl Integer {
     pub fn object_type(&self) -> ObjectType {
         ObjectType::Integer
     }
+    pub fn hash_key(&self) -> HashKey {
+        HashKey {
+            object_type: self.object_type(),
+            value: self.value as u64,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -86,6 +100,12 @@ impl Boolean {
     }
     pub fn object_type(&self) -> ObjectType {
         ObjectType::Boolean
+    }
+    pub fn hash_key(&self) -> HashKey {
+        HashKey {
+            object_type: self.object_type(),
+            value: if self.value { 1 } else { 0 },
+        }
     }
 }
 
@@ -151,6 +171,14 @@ impl MonString {
     pub fn object_type(&self) -> ObjectType {
         ObjectType::MonString
     }
+    pub fn hash_key(&self) -> HashKey {
+        let mut hasher = FnvHasher::new();
+        hasher.write(self.value.as_bytes());
+        HashKey {
+            object_type: self.object_type(),
+            value: hasher.finish(),
+        }
+    }
 }
 
 pub type BuiltinFunction = fn(args: Vec<Object>) -> Result<Object, String>;
@@ -212,5 +240,59 @@ impl Array {
 
     pub fn object_type(&self) -> ObjectType {
         ObjectType::Array
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct HashKey {
+    pub object_type: ObjectType,
+    pub value: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct HashPair {
+    pub key: Object,
+    pub value: Object,
+}
+
+#[derive(Debug, Clone)]
+pub struct HashObject {
+    pub pairs: HashMap<HashKey, HashPair>,
+}
+
+impl HashObject {
+    pub fn inspect(&self) -> String {
+        let mut kvs = Vec::with_capacity(self.pairs.len());
+        for pair in self.pairs.values() {
+            kvs.push(format!("{}:{}", pair.key.inspect(), pair.value.inspect()));
+        }
+        format!("{{{}}}", kvs.join(","))
+    }
+
+    pub fn object_type(&self) -> ObjectType {
+        ObjectType::Hash
+    }
+}
+
+#[derive(Default)]
+struct FnvHasher(u64);
+
+impl FnvHasher {
+    fn new() -> Self {
+        Self(0xcbf29ce484222325)
+    }
+}
+
+impl Hasher for FnvHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        const FNV_PRIME: u64 = 0x100000001b3;
+        for b in bytes {
+            self.0 ^= u64::from(*b);
+            self.0 = self.0.wrapping_mul(FNV_PRIME);
+        }
     }
 }

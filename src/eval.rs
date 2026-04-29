@@ -2,8 +2,9 @@ use crate::{
     ast::{Expression, Identifier, IfExpression, Program, Statement},
     builtin::get_builtin,
     environment::Environment,
-    object::{Array, Boolean, Function, Integer, MonString, Null, Object, ReturnValue},
+    object::{Array, Boolean, Function, HashKey, HashObject, HashPair, Integer, MonString, Null, Object, ReturnValue},
 };
+use std::collections::HashMap;
 use std::{cell::RefCell, rc::Rc};
 
 pub fn eval(ast: &Program, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
@@ -106,6 +107,7 @@ fn eval_expression(expr: &Expression, env: Rc<RefCell<Environment>>) -> Result<O
             let args = eval_expressions(&ae.elements, env.clone())?;
             Ok(Object::Array(Array::new(args)))
         }
+        Expression::HashExpression(he) => eval_hash_literal(he, env.clone()),
         Expression::IndexExpression(ie) => {
             let left = eval_expression(&ie.left, env.clone())?;
             let index = eval_expression(&ie.index, env.clone())?;
@@ -312,6 +314,7 @@ fn eval_index_expression(left: Object, index: Object) -> Result<Object, String> 
             "the index should be an integer, but got {:?}",
             other
         )),
+        (Object::Hash(hash), index) => eval_hash_index_expression(hash, index),
         (other, _) => Err(format!("{:?} is not indexable", other)),
     }
 }
@@ -327,6 +330,37 @@ fn eval_array_index_expression(arr: Array, idx: i64) -> Result<Object, String> {
 
     arr.get(idx as usize)
         .ok_or_else(|| format!("index out of bounds, len:{}, visit:{}", arr.len(), idx))
+}
+
+fn eval_hash_literal(
+    he: &crate::ast::HashLiteral,
+    env: Rc<RefCell<Environment>>,
+) -> Result<Object, String> {
+    let mut pairs: HashMap<HashKey, HashPair> = HashMap::new();
+    for (key_expr, value_expr) in &he.pairs {
+        let key = eval_expression(key_expr, env.clone())?;
+        let hash_key = object_to_hash_key(&key)?;
+        let value = eval_expression(value_expr, env.clone())?;
+        pairs.insert(hash_key, HashPair { key, value });
+    }
+    Ok(Object::Hash(HashObject { pairs }))
+}
+
+fn eval_hash_index_expression(hash: HashObject, index: Object) -> Result<Object, String> {
+    let hash_key = object_to_hash_key(&index)?;
+    match hash.pairs.get(&hash_key) {
+        Some(pair) => Ok(pair.value.clone()),
+        None => Ok(Object::Null(Null {})),
+    }
+}
+
+fn object_to_hash_key(obj: &Object) -> Result<HashKey, String> {
+    match obj {
+        Object::Integer(i) => Ok(i.hash_key()),
+        Object::Boolean(b) => Ok(b.hash_key()),
+        Object::MonString(s) => Ok(s.hash_key()),
+        _ => Err(format!("unusable as hash key: {:?}", obj)),
+    }
 }
 
 #[cfg(test)]
@@ -1181,6 +1215,95 @@ mod tests {
             }
 
             let got = got.expect(tc.input);
+            match got {
+                Object::Integer(i) => {
+                    assert_eq!(Some(i.value), tc.expected_int, "input: {}", tc.input)
+                }
+                other => panic!("input: {}, expected Integer, got {:?}", tc.input, other),
+            }
+        }
+    }
+
+    #[test]
+    fn test_hash_index() {
+        struct TestCase {
+            input: &'static str,
+            expected_int: Option<i64>,
+            expected_null: bool,
+            expected_err_contains: Option<&'static str>,
+        }
+
+        let tests = vec![
+            TestCase {
+                input: r#"{"one": 1, "two": 2}["one"]"#,
+                expected_int: Some(1),
+                expected_null: false,
+                expected_err_contains: None,
+            },
+            TestCase {
+                input: r#"{"a": 1, 2: 3, true: 4}["a"]"#,
+                expected_int: Some(1),
+                expected_null: false,
+                expected_err_contains: None,
+            },
+            TestCase {
+                input: r#"{"a": 1, 2: 3, true: 4}[2]"#,
+                expected_int: Some(3),
+                expected_null: false,
+                expected_err_contains: None,
+            },
+            TestCase {
+                input: r#"{"a": 1, 2: 3, true: 4}[true]"#,
+                expected_int: Some(4),
+                expected_null: false,
+                expected_err_contains: None,
+            },
+            TestCase {
+                input: r#"{"a": 1}["missing"]"#,
+                expected_int: None,
+                expected_null: true,
+                expected_err_contains: None,
+            },
+            TestCase {
+                input: r#"{[1,2]: 3}"#,
+                expected_int: None,
+                expected_null: false,
+                expected_err_contains: Some("unusable as hash key"),
+            },
+            TestCase {
+                input: r#"{"a": 1}[fn(x){x}]"#,
+                expected_int: None,
+                expected_null: false,
+                expected_err_contains: Some("unusable as hash key"),
+            },
+        ];
+
+        for tc in tests {
+            let got = string_to_ast(tc.input);
+            if let Some(expected_err) = tc.expected_err_contains {
+                assert!(got.is_err(), "expected error for input: {}", tc.input);
+                let err = got.unwrap_err();
+                assert!(
+                    err.contains(expected_err),
+                    "input: {}, expected err contains: {}, got: {}",
+                    tc.input,
+                    expected_err,
+                    err
+                );
+                continue;
+            }
+
+            let got = got.expect(tc.input);
+            if tc.expected_null {
+                assert!(
+                    matches!(got, Object::Null(_)),
+                    "input: {}, expected Null, got {:?}",
+                    tc.input,
+                    got
+                );
+                continue;
+            }
+
             match got {
                 Object::Integer(i) => {
                     assert_eq!(Some(i.value), tc.expected_int, "input: {}", tc.input)

@@ -1,4 +1,4 @@
-use crate::object::{Array, Boolean, Builtin, Integer, MonString, Null, Object};
+    use crate::object::{Array, Boolean, Builtin, Integer, MonString, Null, Object};
 
 pub fn get_builtin(name: &str) -> Option<Object> {
     match name {
@@ -138,5 +138,6 @@ fn object_kind(obj: &Object) -> &'static str {
         Object::MonString(MonString { .. }) => "STRING",
         Object::Builtin(_) => "BUILTIN",
         Object::Array(_) => "ARRAY",
+        Object::Hash(_) => "HASH",
     }
 }
